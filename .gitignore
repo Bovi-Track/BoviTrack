@@ -1,0 +1,13 @@
+# Python
+api/.venv/
+__pycache__/
+*.py[cod]
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Variables y secretos
+.env
+.env.*
+!.env.example
