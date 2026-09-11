@@ -11,3 +11,8 @@ frontend/dist/
 .env
 .env.*
 !.env.example
+
+# Supabase
+node_modules
+package.json
+package-lock.json
