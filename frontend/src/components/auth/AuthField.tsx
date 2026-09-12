@@ -5,6 +5,7 @@ type AuthFieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string
   icon: ReactNode
   labelExtra?: ReactNode
+  hint?: ReactNode
 }
 
 export function AuthField({
@@ -12,6 +13,7 @@ export function AuthField({
   label,
   icon,
   labelExtra,
+  hint,
   ...props
 }: AuthFieldProps) {
   return (
@@ -38,6 +40,7 @@ export function AuthField({
           {...props}
         />
       </div>
+      {hint}
     </div>
   )
 }

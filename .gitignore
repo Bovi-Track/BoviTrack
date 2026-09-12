@@ -27,6 +27,7 @@ lerna-debug.log*
 
 # Local files
 *.local
+.agents/
 
 # Supabase CLI
 supabase/.temp/
