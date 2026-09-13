@@ -29,7 +29,7 @@ export function roleLabel(role: FarmRole) {
   return role === 'admin' ? 'Administrador de Finca' : 'Personal de Campo'
 }
 
-function mapRole(name: string | null | undefined): FarmRole {
+export function mapRole(name: string | null | undefined): FarmRole {
   const value = name?.toLowerCase() ?? ''
   if (value.includes('campo') || value.includes('personal')) return 'campo'
   return 'admin'

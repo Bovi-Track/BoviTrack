@@ -1,4 +1,4 @@
-import { Beef, House, Scale, Settings, Warehouse } from 'lucide-react'
+import { Beef, House, Scale, Settings, Tractor, Warehouse } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const items = [
@@ -6,13 +6,14 @@ const items = [
   { to: '/toros', label: 'Toros', icon: Beef },
   { to: '/pesajes', label: 'Pesajes', icon: Scale },
   { to: '/inventario', label: 'Inventario', icon: Warehouse },
+  { to: '/finca', label: 'Finca', icon: Tractor },
   { to: '/ajustes', label: 'Ajustes', icon: Settings },
 ]
 
 export function BottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200/80 bg-white/95 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
-      <ul className="mx-auto grid max-w-lg grid-cols-5 gap-1">
+      <ul className="mx-auto grid max-w-lg grid-cols-6 gap-1">
         {items.map((item) => {
           const Icon = item.icon
           return (

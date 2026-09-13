@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthProvider.tsx'
 import { AppShell } from './components/dashboard/AppShell.tsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.tsx'
+import FarmManagePage from './pages/FarmManagePage.tsx'
 import HomePage from './pages/HomePage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
@@ -71,6 +72,7 @@ function App() {
             />
           }
         />
+        <Route path="/finca" element={<FarmManagePage />} />
         <Route path="/ajustes" element={<SettingsPage />} />
       </Route>
     </Routes>

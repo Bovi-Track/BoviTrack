@@ -14,6 +14,7 @@ import {
   loadUserFarms,
   storeFarmId,
 } from '../lib/dashboard.ts'
+import { updateFarm as updateFarmRequest } from '../lib/farm-manage.ts'
 import type { Farm, FarmRole } from '../types/dashboard.ts'
 
 type FarmContextValue = {
@@ -23,6 +24,7 @@ type FarmContextValue = {
   loading: boolean
   setActiveFarmId: (id: string) => void
   createAndSelectFarm: (nombre: string, ubicacion: string) => Promise<Farm>
+  updateActiveFarm: (patch: Partial<Pick<Farm, 'nombre' | 'ubicacion' | 'activo'>>) => Promise<Farm>
   refreshFarms: () => Promise<void>
 }
 
@@ -92,6 +94,25 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  // Para actualizar lo que es los datos de la finca, nombre, ubicacion, o estado
+  const updateActiveFarm = useCallback(
+    async (patch: Partial<Pick<Farm, 'nombre' | 'ubicacion' | 'activo'>>) => {
+      if (!activeFarmId) throw new Error('No hay finca activa seleccionada.')
+      const current = farms.find((f) => f.id === activeFarmId)
+      const fullPatch = {
+        nombre: patch.nombre ?? current?.nombre ?? '',
+        ubicacion: patch.ubicacion ?? current?.ubicacion ?? null,
+        activo: patch.activo ?? current?.activo ?? true,
+      }
+      const updated = await updateFarmRequest(activeFarmId, fullPatch)
+      setFarms((list) =>
+        list.map((farm) => (farm.id === updated.id ? updated : farm)),
+      )
+      return updated
+    },
+    [activeFarmId, farms],
+  )
+
   const activeFarm = farms.find((farm) => farm.id === activeFarmId) ?? null
   const role = activeFarm ? (rolesByFarm[activeFarm.id] ?? 'admin') : 'admin'
 
@@ -103,6 +124,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       loading,
       setActiveFarmId,
       createAndSelectFarm,
+      updateActiveFarm,
       refreshFarms,
     }),
     [
@@ -112,6 +134,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       loading,
       setActiveFarmId,
       createAndSelectFarm,
+      updateActiveFarm,
       refreshFarms,
     ],
   )

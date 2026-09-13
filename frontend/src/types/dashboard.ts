@@ -7,6 +7,14 @@ export type Farm = {
 
 export type FarmRole = 'admin' | 'campo'
 
+export type FarmMember = {
+  userId: string
+  email: string
+  nombre: string | null
+  role: FarmRole
+  roleId: string
+}
+
 export type Bovine = {
   id: string
   finca_id: string
