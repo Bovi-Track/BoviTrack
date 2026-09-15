@@ -13,6 +13,7 @@ export type FarmMember = {
   nombre: string | null
   role: FarmRole
   roleId: string
+  roleName?: string
 }
 
 export type Bovine = {

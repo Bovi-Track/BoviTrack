@@ -46,6 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      if (event === 'SIGNED_IN') {
+        // Si hay un token de invitacion pendiente, redirigir para aceptarlo
+        const pendingInvite = sessionStorage.getItem('bovitrack-pending-invite')
+        if (pendingInvite && window.location.pathname !== '/unirse') {
+          navigate(`/unirse?token=${encodeURIComponent(pendingInvite)}`, { replace: true })
+        }
+      }
+
       if (event === 'SIGNED_OUT') {
         setPasswordRecovery(false)
       }

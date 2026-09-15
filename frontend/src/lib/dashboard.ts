@@ -61,23 +61,28 @@ export function writePendingWeighings(items: PendingWeighing[]) {
 }
 
 export async function loadUserFarms(userId: string) {
-  const { data, error } = await supabase
-    .from('usuario_finca')
-    .select('finca_id, roles(nombre), finca(id, nombre, ubicacion, activo)')
-    .eq('usuario_id', userId)
+  const { data, error } = await supabase.rpc('obtener_fincas_usuario', {
+    p_usuario_id: userId,
+  })
 
   if (error) throw error
 
-  const farms: { farm: Farm; role: FarmRole }[] = []
-  for (const row of data ?? []) {
-    const farm = row.finca as Farm | Farm[] | null
-    const resolved = Array.isArray(farm) ? farm[0] : farm
-    if (!resolved) continue
-    const roles = row.roles as { nombre: string } | { nombre: string }[] | null
-    const roleName = Array.isArray(roles) ? roles[0]?.nombre : roles?.nombre
-    farms.push({ farm: resolved, role: mapRole(roleName) })
-  }
-  return farms
+  return ((data ?? []) as {
+    finca_id: string
+    nombre: string
+    ubicacion: string | null
+    activo: boolean
+    rol_id: string
+    rol_nombre: string
+  }[]).map((row) => ({
+    farm: {
+      id: row.finca_id,
+      nombre: row.nombre,
+      ubicacion: row.ubicacion,
+      activo: row.activo,
+    },
+    role: mapRole(row.rol_nombre),
+  }))
 }
 
 export async function createFarm(nombre: string, ubicacion: string) {

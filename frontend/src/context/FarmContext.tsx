@@ -19,6 +19,7 @@ import type { Farm, FarmRole } from '../types/dashboard.ts'
 
 type FarmContextValue = {
   farms: Farm[]
+  rolesByFarm: Record<string, FarmRole>
   activeFarm: Farm | null
   role: FarmRole
   loading: boolean
@@ -119,6 +120,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       farms,
+      rolesByFarm,
       activeFarm,
       role,
       loading,
@@ -129,6 +131,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     }),
     [
       farms,
+      rolesByFarm,
       activeFarm,
       role,
       loading,

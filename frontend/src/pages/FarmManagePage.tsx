@@ -1,6 +1,8 @@
 import {
   Check,
   ChevronDown,
+  ClipboardCheck,
+  Link2,
   Loader2,
   Mail,
   MapPin,
@@ -16,10 +18,11 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
+import { useAuth } from '../auth/AuthProvider.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
-import { roleLabel } from '../lib/dashboard.ts'
 import {
   addFarmMember,
+  createFarmInvitation,
   loadFarmMembers,
   loadRoles,
   removeFarmMember,
@@ -27,7 +30,8 @@ import {
 import type { FarmMember } from '../types/dashboard.ts'
 
 export default function FarmManagePage() {
-  const { activeFarm, role, updateActiveFarm } = useFarm()
+  const { activeFarm, farms, rolesByFarm, role, setActiveFarmId, updateActiveFarm } = useFarm()
+  const { user } = useAuth()
 
   const [toast, setToast] = useState<{
     message: string
@@ -62,11 +66,14 @@ export default function FarmManagePage() {
           Acceso restringido
         </p>
         <p className="mt-1 text-sm text-stone-500">
-          Solo los administradores de la finca pueden gestionar esta sección.
+          Solo los administradores de la finca pueden gestionar esta seccion.
         </p>
       </div>
     )
   }
+
+  // Solo fincas donde el usuario actual es admin
+  const adminFarms = farms.filter((f) => rolesByFarm[f.id] === 'admin')
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-6 pb-10">
@@ -76,14 +83,17 @@ export default function FarmManagePage() {
         <p className="text-[11px] font-medium tracking-[0.18em] text-stone-400">
           FINCA ACTIVA
         </p>
-        <h1 className="font-serif text-3xl font-semibold text-stone-900">
-          Gestionar finca
-        </h1>
+        <FarmSelectorDropdown
+          farms={adminFarms}
+          activeFarmId={activeFarm.id}
+          onSelect={setActiveFarmId}
+        />
       </header>
 
       <div className="space-y-5">
         {/* Informacion de la finca seleccionada*/}
         <InfoSection
+          key={activeFarm.id}
           farmId={activeFarm.id}
           initialNombre={activeFarm.nombre}
           initialUbicacion={activeFarm.ubicacion ?? ''}
@@ -100,8 +110,9 @@ export default function FarmManagePage() {
 
         {/* Seccion de los miembros asociados */}
         <MembersSection
+          key={activeFarm.id}
           farmId={activeFarm.id}
-          currentUserId={undefined}
+          currentUserId={user?.id}
           onToast={setToast}
         />
       </div>
@@ -110,6 +121,105 @@ export default function FarmManagePage() {
 }
 
 
+// FarmSelectorDropdown
+function FarmSelectorDropdown({
+  farms,
+  activeFarmId,
+  onSelect,
+}: {
+  farms: { id: string; nombre: string; ubicacion: string | null }[]
+  activeFarmId: string
+  onSelect: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const activeFarm = farms.find((f) => f.id === activeFarmId)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => window.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  if (farms.length <= 1) {
+    return (
+      <h1 className="font-serif text-3xl font-semibold text-stone-900">
+        {activeFarm?.nombre ?? 'Gestionar finca'}
+      </h1>
+    )
+  }
+
+  return (
+    <div ref={containerRef} className="relative inline-block">
+      <button
+        type="button"
+        id="farm-selector-btn"
+        onClick={() => setOpen((v) => !v)}
+        className="group flex items-center gap-2 rounded-xl py-1 pr-2 -ml-1 pl-1 text-left transition hover:bg-stone-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-bovi/40"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <h1 className="font-serif text-3xl font-semibold text-stone-900 leading-tight">
+          {activeFarm?.nombre ?? 'Gestionar finca'}
+        </h1>
+        <ChevronDown
+          className={`size-5 text-stone-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-xl shadow-stone-900/10 animate-in fade-in slide-in-from-top-1 duration-150"
+        >
+          <p className="px-3 pt-3 pb-1 text-[10px] font-semibold tracking-widest text-stone-400 uppercase">
+            Tus fincas
+          </p>
+          <ul className="p-1.5 space-y-0.5">
+            {farms.map((farm) => {
+              const isActive = farm.id === activeFarmId
+              return (
+                <li key={farm.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isActive}
+                    onClick={() => {
+                      onSelect(farm.id)
+                      setOpen(false)
+                    }}
+                    className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${isActive
+                      ? 'bg-bovi/10 text-bovi'
+                      : 'text-stone-700 hover:bg-stone-50'
+                      }`}
+                  >
+                    <Tractor className="size-4 shrink-0 opacity-70" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{farm.nombre}</p>
+                      {farm.ubicacion && (
+                        <p className="truncate text-[11px] opacity-60">{farm.ubicacion}</p>
+                      )}
+                    </div>
+                    {isActive && <Check className="ml-auto size-4 shrink-0" />}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// InfoSection
 function InfoSection({
   initialNombre,
   initialUbicacion,
@@ -128,14 +238,6 @@ function InfoSection({
   const [saving, setSaving] = useState(false)
   const nombreRef = useRef<HTMLInputElement>(null)
 
-
-  useEffect(() => {
-    if (!editing) {
-      setNombre(initialNombre)
-      setUbicacion(initialUbicacion)
-    }
-  }, [initialNombre, initialUbicacion, editing])
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -145,7 +247,7 @@ function InfoSection({
         ubicacion: ubicacion.trim() || undefined,
       })
       setEditing(false)
-      onToast({ message: 'Información de la finca actualizada', tone: 'ok' })
+      onToast({ message: 'Informacion de la finca actualizada', tone: 'ok' })
     } catch (err) {
       onToast({
         message:
@@ -351,6 +453,7 @@ function StatusSection({
 }
 
 
+// MembersSection
 function MembersSection({
   farmId,
   currentUserId,
@@ -364,32 +467,58 @@ function MembersSection({
   const [roles, setRoles] = useState<{ id: string; nombre: string }[]>([])
   const [loadingMembers, setLoadingMembers] = useState(true)
 
-
   const [addEmail, setAddEmail] = useState('')
   const [addRoleId, setAddRoleId] = useState('')
   const [adding, setAdding] = useState(false)
 
-
   const [removingId, setRemovingId] = useState<string | null>(null)
+
+  // Tabs: 'email' | 'link'
+  const [inviteTab, setInviteTab] = useState<'email' | 'link'>('email')
+
+  // Link invitation state
+  const [linkRoleId, setLinkRoleId] = useState('')
+  const [generatingLink, setGeneratingLink] = useState(false)
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     let active = true
-    setLoadingMembers(true)
 
     async function load() {
       try {
-        const [fetchedMembers, fetchedRoles] = await Promise.all([
+        const [membersRes, rolesRes] = await Promise.allSettled([
           loadFarmMembers(farmId),
           loadRoles(),
         ])
         if (!active) return
-        setMembers(fetchedMembers)
-        setRoles(fetchedRoles)
-        if (fetchedRoles[0] && !addRoleId) {
-          setAddRoleId(fetchedRoles[0].id)
+
+        if (rolesRes.status === 'fulfilled') {
+          const fetchedRoles = rolesRes.value
+          setRoles(fetchedRoles)
+          if (fetchedRoles[0] && !addRoleId) {
+            setAddRoleId(fetchedRoles[0].id)
+            setLinkRoleId(fetchedRoles[0].id)
+          }
+        } else {
+          console.error('Error al cargar roles:', rolesRes.reason)
         }
-      } catch {
+
+        if (membersRes.status === 'fulfilled') {
+          setMembers(membersRes.value)
+        } else {
+          console.error('Error al cargar miembros del equipo:', membersRes.reason)
+          onToast({
+            message:
+              membersRes.reason instanceof Error
+                ? membersRes.reason.message
+                : 'No se pudo cargar el equipo.',
+            tone: 'error',
+          })
+        }
+      } catch (err) {
         if (!active) return
+        console.error('Error general al cargar equipo o roles:', err)
         onToast({ message: 'No se pudo cargar el equipo.', tone: 'error' })
       } finally {
         if (active) setLoadingMembers(false)
@@ -407,11 +536,10 @@ function MembersSection({
     setAdding(true)
     try {
       await addFarmMember(farmId, addEmail.trim().toLowerCase(), addRoleId)
-      // Reload members list
       const updated = await loadFarmMembers(farmId)
       setMembers(updated)
       setAddEmail('')
-      onToast({ message: `Usuario agregado correctamente`, tone: 'ok' })
+      onToast({ message: 'Usuario agregado correctamente', tone: 'ok' })
     } catch (err) {
       onToast({
         message:
@@ -440,8 +568,34 @@ function MembersSection({
     }
   }
 
+  async function handleGenerateLink() {
+    if (!linkRoleId) return
+    setGeneratingLink(true)
+    setGeneratedLink(null)
+    setCopied(false)
+    try {
+      const token = await createFarmInvitation(farmId, linkRoleId)
+      const link = `${window.location.origin}/unirse?token=${encodeURIComponent(token)}`
+      setGeneratedLink(link)
+    } catch (err) {
+      onToast({
+        message:
+          err instanceof Error ? err.message : 'No se pudo generar el enlace.',
+        tone: 'error',
+      })
+    } finally {
+      setGeneratingLink(false)
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!generatedLink) return
+    await navigator.clipboard.writeText(generatedLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
   const adminRoleId = roles.find((r) => !r.nombre.toLowerCase().includes('campo'))?.id
-  const campoRoleId = roles.find((r) => r.nombre.toLowerCase().includes('campo'))?.id
 
   return (
     <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
@@ -452,13 +606,12 @@ function MembersSection({
         </h2>
       </div>
 
-
       {loadingMembers ? (
         <div className="flex items-center justify-center py-6">
           <Loader2 className="size-6 animate-spin text-stone-400" />
         </div>
       ) : members.length === 0 ? (
-        <p className="text-sm text-stone-400 mb-4">No hay usuarios asignados aún.</p>
+        <p className="text-sm text-stone-400 mb-4">No hay usuarios asignados aun.</p>
       ) : (
         <ul className="space-y-2 mb-5">
           {members.map((member) => {
@@ -478,7 +631,12 @@ function MembersSection({
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <RoleBadge role={member.role} adminRoleId={adminRoleId} campoRoleId={campoRoleId} roleId={member.roleId} />
+                  <RoleBadge
+                    role={member.role}
+                    adminRoleId={adminRoleId}
+                    roleId={member.roleId}
+                    roleName={member.roleName}
+                  />
                   {!isCurrentUser && (
                     <button
                       type="button"
@@ -501,67 +659,196 @@ function MembersSection({
         </ul>
       )}
 
-
+      {/* ---- Agregar integrante ---- */}
       <div className="border-t border-stone-100 pt-5">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-4">
           <UserPlus className="size-4 text-bovi" />
-          <p className="text-sm font-semibold text-stone-800">Agregar usuario</p>
+          <p className="text-sm font-semibold text-stone-800">Agregar integrante</p>
         </div>
-        <p className="text-xs text-stone-500 mb-3">
-          El usuario debe estar registrado en BoviTrack.
-        </p>
-        <form onSubmit={handleAdd} className="space-y-3">
-          <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
-            <input
-              type="email"
-              required
-              value={addEmail}
-              onChange={(e) => setAddEmail(e.target.value)}
-              placeholder="correo@ejemplo.com"
-              className={`${fieldClass} pl-9`}
-              id="add-member-email"
-            />
-          </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="add-role-select" className="text-sm font-medium text-stone-800">
-              Rol
-            </label>
-            <div className="relative">
-              <select
-                id="add-role-select"
-                value={addRoleId}
-                onChange={(e) => setAddRoleId(e.target.value)}
-                className={`${fieldClass} appearance-none pr-10`}
-                required
-              >
-                {roles.map((r) => {
-                  const mappedRole = r.nombre.toLowerCase().includes('campo') ? 'campo' : 'admin'
-                  return (
-                    <option key={r.id} value={r.id}>
-                      {roleLabel(mappedRole)}
-                    </option>
-                  )
-                })}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
-            </div>
-          </div>
-
+        {/* Tabs */}
+        <div className="mb-4 flex gap-1 rounded-xl bg-stone-100 p-1">
           <button
-            type="submit"
-            disabled={adding || !addRoleId}
-            className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:opacity-70"
+            type="button"
+            id="invite-tab-email"
+            onClick={() => { setInviteTab('email'); setGeneratedLink(null) }}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition ${inviteTab === 'email'
+              ? 'bg-white text-stone-900 shadow-sm'
+              : 'text-stone-500 hover:text-stone-700'
+              }`}
           >
-            {adding ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <UserPlus className="size-4" />
-            )}
-            {adding ? 'Agregando…' : 'Agregar al equipo'}
+            <Mail className="size-3.5" />
+            Por correo
           </button>
-        </form>
+          <button
+            type="button"
+            id="invite-tab-link"
+            onClick={() => { setInviteTab('link'); setGeneratedLink(null) }}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition ${inviteTab === 'link'
+              ? 'bg-white text-stone-900 shadow-sm'
+              : 'text-stone-500 hover:text-stone-700'
+              }`}
+          >
+            <Link2 className="size-3.5" />
+            Por enlace
+          </button>
+        </div>
+
+        {inviteTab === 'email' && (
+          <>
+            <p className="text-xs text-stone-500 mb-3">
+              El usuario debe estar registrado en BoviTrack.
+            </p>
+            <form onSubmit={handleAdd} className="space-y-3">
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="email"
+                  required
+                  value={addEmail}
+                  onChange={(e) => setAddEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className={`${fieldClass} pl-9`}
+                  id="add-member-email"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="add-role-select" className="text-sm font-medium text-stone-800">
+                  Rol
+                </label>
+                <div className="relative">
+                  <select
+                    id="add-role-select"
+                    value={addRoleId}
+                    onChange={(e) => setAddRoleId(e.target.value)}
+                    className={`${fieldClass} appearance-none pr-10`}
+                    required
+                    disabled={roles.length === 0}
+                  >
+                    {roles.length === 0 ? (
+                      <option value="" disabled>
+                        Cargando roles...
+                      </option>
+                    ) : (
+                      roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.nombre}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={adding || !addRoleId}
+                className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:opacity-70"
+              >
+                {adding ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <UserPlus className="size-4" />
+                )}
+                {adding ? 'Agregando…' : 'Agregar al equipo'}
+              </button>
+            </form>
+          </>
+        )}
+
+        {inviteTab === 'link' && (
+          <>
+            <p className="text-xs text-stone-500 mb-3">
+              Genera un enlace unico. Cualquier persona con el enlace puede unirse a la finca.
+              El enlace expira en <strong>7 dias</strong> y es de uso unico.
+            </p>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label htmlFor="link-role-select" className="text-sm font-medium text-stone-800">
+                  Rol del invitado
+                </label>
+                <div className="relative">
+                  <select
+                    id="link-role-select"
+                    value={linkRoleId}
+                    onChange={(e) => { setLinkRoleId(e.target.value); setGeneratedLink(null) }}
+                    className={`${fieldClass} appearance-none pr-10`}
+                    disabled={roles.length === 0}
+                  >
+                    {roles.length === 0 ? (
+                      <option value="" disabled>
+                        Cargando roles...
+                      </option>
+                    ) : (
+                      roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.nombre}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+                </div>
+              </div>
+
+              {generatedLink ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-cream px-3 py-2.5">
+                    <p className="flex-1 truncate text-xs text-stone-600 font-mono">
+                      {generatedLink}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    id="copy-invite-link-btn"
+                    onClick={handleCopyLink}
+                    className={`flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl text-sm font-medium transition ${copied
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-bovi text-white hover:bg-bovi-hover'
+                      }`}
+                  >
+                    {copied ? (
+                      <>
+                        <ClipboardCheck className="size-4" />
+                        ¡Enlace copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Link2 className="size-4" />
+                        Copiar enlace
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setGeneratedLink(null); setCopied(false) }}
+                    className="w-full text-center text-xs text-stone-400 hover:text-stone-600 transition py-1"
+                  >
+                    Generar nuevo enlace
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  id="generate-invite-link-btn"
+                  disabled={generatingLink || !linkRoleId}
+                  onClick={handleGenerateLink}
+                  className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:opacity-70"
+                >
+                  {generatingLink ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Link2 className="size-4" />
+                  )}
+                  {generatingLink ? 'Generando…' : 'Generar enlace de invitacion'}
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </section>
   )
@@ -570,13 +857,13 @@ function MembersSection({
 function RoleBadge({
   role,
   adminRoleId,
-  campoRoleId,
   roleId,
+  roleName,
 }: {
   role: 'admin' | 'campo'
   adminRoleId: string | undefined
-  campoRoleId: string | undefined
   roleId: string
+  roleName?: string
 }) {
   const isAdmin = role === 'admin' || roleId === adminRoleId
   return (
@@ -589,7 +876,7 @@ function RoleBadge({
       ) : (
         <Tractor className="size-3" />
       )}
-      {isAdmin ? 'Admin' : 'Campo'}
+      {roleName ?? (isAdmin ? 'Admin' : 'Campo')}
     </span>
   )
 }

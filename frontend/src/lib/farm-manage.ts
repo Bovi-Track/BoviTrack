@@ -17,9 +17,7 @@ export async function updateFarm(
 }
 
 export async function loadRoles(): Promise<{ id: string; nombre: string }[]> {
-  const { data, error } = await supabase
-    .from('roles')
-    .select('id, nombre')
+  const { data, error } = await supabase.rpc('obtener_roles')
   if (error) throw error
   return (data ?? []) as { id: string; nombre: string }[]
 }
@@ -42,6 +40,7 @@ export async function loadFarmMembers(farmId: string): Promise<FarmMember[]> {
     nombre: row.nombre_completo,
     role: mapRole(row.rol_nombre),
     roleId: row.rol_id,
+    roleName: row.rol_nombre,
   }))
 }
 
@@ -64,4 +63,28 @@ export async function removeFarmMember(farmId: string, userId: string): Promise<
     p_usuario_id: userId,
   })
   if (error) throw error
+}
+
+/** Crea un token de invitacion para una finca y retorna el token */
+export async function createFarmInvitation(
+  farmId: string,
+  roleId: string,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('crear_invitacion_finca', {
+    p_finca_id: farmId,
+    p_rol_id:   roleId,
+  })
+  if (error) throw error
+  return data as string
+}
+
+/** Acepta una invitacion por token. Retorna los datos de la finca. */
+export async function acceptFarmInvitation(
+  token: string,
+): Promise<{ finca_id: string; nombre: string; ubicacion: string | null; activo: boolean }> {
+  const { data, error } = await supabase.rpc('aceptar_invitacion_finca', {
+    p_token: token,
+  })
+  if (error) throw error
+  return data as { finca_id: string; nombre: string; ubicacion: string | null; activo: boolean }
 }

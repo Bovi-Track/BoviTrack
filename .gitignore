@@ -32,6 +32,7 @@ lerna-debug.log*
 # Supabase CLI
 supabase/.temp/
 supabase/.branches/
+supabase/migrations
 
 # Editor directories and files
 .vscode/*

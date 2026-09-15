@@ -4,6 +4,7 @@ import { AppShell } from './components/dashboard/AppShell.tsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.tsx'
 import FarmManagePage from './pages/FarmManagePage.tsx'
 import HomePage from './pages/HomePage.tsx'
+import JoinFarmPage from './pages/JoinFarmPage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx'
@@ -33,6 +34,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/inicio" replace />} />
+      <Route path="/unirse" element={<JoinFarmPage />} />
       <Route path="/iniciar-sesion" element={<LoginPage />} />
       <Route path="/registro" element={<RegisterPage />} />
       <Route path="/olvidar-contrasena" element={<ForgotPasswordPage />} />
