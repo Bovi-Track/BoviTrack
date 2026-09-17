@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Field, fieldClass } from '../components/dashboard/Modal.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
 import { todayIso } from '../lib/dashboard.ts'
-import { calculatePurchasePreview, createPurchase } from '../lib/purchases.ts'
+import { calculatePurchasePreview, createPurchase, purchaseErrorMessage } from '../lib/purchases.ts'
 import type { Farm } from '../types/dashboard.ts'
 import type { PurchaseBovineInput, PurchaseResult } from '../types/purchases.ts'
 
@@ -152,7 +152,7 @@ export default function PurchasesPage() {
       setResult(saved)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo registrar la compra.')
+      setError(purchaseErrorMessage(cause))
     } finally {
       setSubmitting(false)
     }

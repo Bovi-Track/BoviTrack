@@ -15,6 +15,21 @@ export async function createPurchase(payload: CreatePurchaseInput) {
   return data as PurchaseResult
 }
 
+export function purchaseErrorMessage(cause: unknown) {
+  const error = cause as { code?: string; message?: string } | null
+  if (error?.code === '23505') {
+    return 'Ya existe un bovino con ese número DIIO o identificador interno.'
+  }
+  if (error?.code === 'P0001' && error.message) return error.message
+  if (error?.code === '42501' && error.message?.startsWith('No puede registrar')) {
+    return error.message
+  }
+  if (error?.code === '42501' && error.message?.startsWith('La cuenta')) {
+    return error.message
+  }
+  return 'No se pudo registrar la compra. Revisa los datos e inténtalo de nuevo.'
+}
+
 export function calculatePurchasePreview(
   bovines: { peso_compra_kg: number; precio_compra_kilo: number }[],
   freight: number,
