@@ -18,7 +18,6 @@ type PurchaseHeader = {
 
 type BovineDraft = {
   localId: string
-  finca_id: string
   numero_diio: string
   identificador_interno: string
   nombre: string
@@ -53,7 +52,6 @@ function newHeader(): PurchaseHeader {
 function newBovine(): BovineDraft {
   return {
     localId: crypto.randomUUID(),
-    finca_id: '',
     numero_diio: '',
     identificador_interno: '',
     nombre: '',
@@ -75,12 +73,7 @@ export default function PurchasesPage() {
   const [error, setError] = useState('')
   const [result, setResult] = useState<PurchaseResult | null>(null)
 
-  const adminFarms = farms.filter(
-    (farm) => farm.activo && rolesByFarm[farm.id] === 'admin',
-  )
-  const defaultFarmId = adminFarms.some((farm) => farm.id === activeFarm?.id)
-    ? activeFarm?.id ?? ''
-    : adminFarms[0]?.id ?? ''
+  const canRegister = !!activeFarm && activeFarm.activo && rolesByFarm[activeFarm.id] === 'admin'
 
   const preview = useMemo(
     () => calculatePurchasePreview(
@@ -112,11 +105,11 @@ export default function PurchasesPage() {
       return
     }
 
-    const selectedFarms = bovines.map((bovine) => bovine.finca_id || defaultFarmId)
-    if (selectedFarms.some((id) => !adminFarms.some((farm) => farm.id === id))) {
-      setError('Selecciona una finca administrada para cada bovino.')
+    if (!activeFarm || !canRegister) {
+      setError('Selecciona una finca activa que administres.')
       return
     }
+    const farmId = activeFarm.id
 
     const diios = bovines.map((bovine) => bovine.numero_diio.trim())
     const internalIds = bovines.map((bovine) => bovine.identificador_interno.trim())
@@ -125,8 +118,8 @@ export default function PurchasesPage() {
       return
     }
 
-    const purchaseBovines: PurchaseBovineInput[] = bovines.map((bovine, index) => ({
-      finca_id: selectedFarms[index],
+    const purchaseBovines: PurchaseBovineInput[] = bovines.map((bovine) => ({
+      finca_id: farmId,
       numero_diio: bovine.numero_diio.trim(),
       identificador_interno: bovine.identificador_interno.trim(),
       nombre: bovine.nombre.trim() || null,
@@ -169,13 +162,13 @@ export default function PurchasesPage() {
     return <p className="mx-auto max-w-3xl px-4 pt-10 text-sm text-stone-500">Cargando fincas…</p>
   }
 
-  if (adminFarms.length === 0) {
+  if (!canRegister) {
     return (
       <div className="mx-auto max-w-3xl px-4 pt-10 text-center">
         <ShoppingBag className="mx-auto mb-3 size-10 text-stone-300" />
-        <h1 className="font-serif text-xl font-semibold text-stone-800">Sin finca administrada</h1>
+        <h1 className="font-serif text-xl font-semibold text-stone-800">Selecciona una finca administrada</h1>
         <p className="mt-1 text-sm text-stone-500">
-          Para registrar compras necesitas administrar al menos una finca activa.
+          Para registrar compras, selecciona en Inicio una finca activa que administres.
         </p>
         <Link to="/inicio" className="mt-5 inline-flex text-sm font-medium text-bovi underline underline-offset-2">
           Volver al inicio
@@ -198,7 +191,7 @@ export default function PurchasesPage() {
         <p className="text-[11px] font-medium tracking-[0.18em] text-stone-400">COMPRAS DE GANADO</p>
         <h1 className="mt-1 font-serif text-3xl font-semibold text-stone-900">Registrar compra</h1>
         <p className="mt-2 max-w-2xl text-sm text-stone-500">
-          Registra la factura y los bovinos adquiridos. Puedes asignar cada animal a una finca distinta.
+          Registra la factura y los bovinos adquiridos. Todos se asignarán a la finca activa: {activeFarm.nombre}.
         </p>
       </header>
 
@@ -270,13 +263,6 @@ export default function PurchasesPage() {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field id={`${prefix}-finca`} label="Finca de ingreso">
-                      <select id={`${prefix}-finca`} required value={bovine.finca_id || defaultFarmId}
-                        onChange={(event) => updateBovine(bovine.localId, 'finca_id', event.target.value)}
-                        className={fieldClass}>
-                        {adminFarms.map((farm) => <option key={farm.id} value={farm.id}>{farm.nombre}</option>)}
-                      </select>
-                    </Field>
                     <Field id={`${prefix}-sexo`} label="Sexo">
                       <select id={`${prefix}-sexo`} required value={bovine.sexo}
                         onChange={(event) => updateBovine(bovine.localId, 'sexo', event.target.value)}
