@@ -451,7 +451,7 @@ export default function HomePage() {
                 label="Movimiento de bodega"
               />
               <Shortcut
-                to="/toros"
+                to="/compras"
                 icon={<ShoppingBag className="size-5" />}
                 label="Compras en subasta"
               />

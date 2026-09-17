@@ -30,9 +30,7 @@ export function roleLabel(role: FarmRole) {
 }
 
 export function mapRole(name: string | null | undefined): FarmRole {
-  const value = name?.toLowerCase() ?? ''
-  if (value.includes('campo') || value.includes('personal')) return 'campo'
-  return 'admin'
+  return name?.trim().toUpperCase() === 'ADMINISTRADOR' ? 'admin' : 'campo'
 }
 
 export function getStoredFarmId() {
@@ -117,10 +115,6 @@ export async function createBovine(payload: {
   sexo: 'MACHO' | 'HEMBRA'
   fecha_nacimiento: string | null
   fecha_ingreso: string
-  precio_compra_kilo: number | null
-  costo_flete_asignado: number
-  estado: Bovine['estado']
-  compra_id: string | null
 }) {
   const { data, error } = await supabase
     .from('bovino')

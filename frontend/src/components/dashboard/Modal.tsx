@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 type ModalProps = {
   title: string
-  description?: string
+  description?: ReactNode
   open: boolean
   onClose: () => void
   children: ReactNode
