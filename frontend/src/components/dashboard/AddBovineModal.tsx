@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { todayIso } from '../../lib/dashboard.ts'
-import type { Bovine } from '../../types/dashboard.ts'
 import { Field, Modal, fieldClass } from './Modal.tsx'
 
 type AddBovineModalProps = {
@@ -16,10 +16,6 @@ type AddBovineModalProps = {
     sexo: 'MACHO' | 'HEMBRA'
     fecha_nacimiento: string | null
     fecha_ingreso: string
-    precio_compra_kilo: number | null
-    costo_flete_asignado: number
-    estado: Bovine['estado']
-    compra_id: string | null
   }) => Promise<void>
 }
 
@@ -32,10 +28,6 @@ const emptyForm = {
   sexo: 'MACHO' as const,
   fecha_nacimiento: '',
   fecha_ingreso: todayIso(),
-  precio_compra_kilo: '',
-  costo_flete_asignado: '0',
-  estado: 'ACTIVO' as Bovine['estado'],
-  compra_id: '',
 }
 
 export function AddBovineModal({
@@ -66,13 +58,6 @@ export function AddBovineModal({
         sexo: form.sexo as 'MACHO' | 'HEMBRA',
         fecha_nacimiento: form.fecha_nacimiento || null,
         fecha_ingreso: form.fecha_ingreso,
-        precio_compra_kilo:
-          form.precio_compra_kilo === ''
-            ? null
-            : Number(form.precio_compra_kilo),
-        costo_flete_asignado: Number(form.costo_flete_asignado || 0),
-        estado: form.estado as Bovine['estado'],
-        compra_id: form.compra_id.trim() || null,
       })
       setForm({ ...emptyForm, fecha_ingreso: todayIso() })
       onClose()
@@ -92,7 +77,18 @@ export function AddBovineModal({
       open={open}
       onClose={onClose}
       title="Agregar bovino"
-      description={`Se registrará en ${farmName}. El ID se genera solo.`}
+      description={
+        <>
+          Se registrará en {farmName}. El ID se genera solo. Si deseas registrar una compra, ve a{' '}
+          <Link
+            to="/compras"
+            onClick={onClose}
+            className="font-medium text-bovi underline underline-offset-2"
+          >
+            compras
+          </Link>.
+        </>
+      }
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -181,57 +177,6 @@ export function AddBovineModal({
               value={form.fecha_ingreso}
               onChange={(event) => update('fecha_ingreso', event.target.value)}
               className={fieldClass}
-            />
-          </Field>
-          <Field id="precio" label="Precio compra / kilo">
-            <input
-              id="precio"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.precio_compra_kilo}
-              onChange={(event) =>
-                update('precio_compra_kilo', event.target.value)
-              }
-              className={fieldClass}
-              placeholder="0.00"
-            />
-          </Field>
-          <Field id="flete" label="Costo flete asignado">
-            <input
-              id="flete"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.costo_flete_asignado}
-              onChange={(event) =>
-                update('costo_flete_asignado', event.target.value)
-              }
-              className={fieldClass}
-            />
-          </Field>
-          <Field id="estado" label="Estado">
-            <select
-              id="estado"
-              required
-              value={form.estado}
-              onChange={(event) => update('estado', event.target.value)}
-              className={fieldClass}
-            >
-              <option value="ACTIVO">Activo</option>
-              <option value="INACTIVO">Inactivo</option>
-              <option value="VENDIDO">Vendido</option>
-              <option value="BAJA">Baja</option>
-              <option value="MUERTO">Muerto</option>
-            </select>
-          </Field>
-          <Field id="compra" label="ID compra subasta (opcional)">
-            <input
-              id="compra"
-              value={form.compra_id}
-              onChange={(event) => update('compra_id', event.target.value)}
-              className={fieldClass}
-              placeholder="Dejar vacío si no aplica"
             />
           </Field>
         </div>

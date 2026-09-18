@@ -15,7 +15,11 @@ const ACTIVE_FARM_KEY = 'bovitrack-active-farm'
 const PENDING_WEIGHS_KEY = 'bovitrack-pending-pesajes'
 
 export function todayIso() {
-  return new Date().toISOString().slice(0, 10)
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 export function greetingForNow(name: string) {
@@ -30,9 +34,7 @@ export function roleLabel(role: FarmRole) {
 }
 
 export function mapRole(name: string | null | undefined): FarmRole {
-  const value = name?.toLowerCase() ?? ''
-  if (value.includes('campo') || value.includes('personal')) return 'campo'
-  return 'admin'
+  return name?.trim().toUpperCase() === 'ADMINISTRADOR' ? 'admin' : 'campo'
 }
 
 export function getStoredFarmId() {
@@ -117,10 +119,6 @@ export async function createBovine(payload: {
   sexo: 'MACHO' | 'HEMBRA'
   fecha_nacimiento: string | null
   fecha_ingreso: string
-  precio_compra_kilo: number | null
-  costo_flete_asignado: number
-  estado: Bovine['estado']
-  compra_id: string | null
 }) {
   const { data, error } = await supabase
     .from('bovino')

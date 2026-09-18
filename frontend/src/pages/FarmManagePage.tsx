@@ -595,8 +595,6 @@ function MembersSection({
     setTimeout(() => setCopied(false), 2500)
   }
 
-  const adminRoleId = roles.find((r) => !r.nombre.toLowerCase().includes('campo'))?.id
-
   return (
     <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-4">
@@ -633,9 +631,6 @@ function MembersSection({
                 <div className="flex shrink-0 items-center gap-2">
                   <RoleBadge
                     role={member.role}
-                    adminRoleId={adminRoleId}
-                    roleId={member.roleId}
-                    roleName={member.roleName}
                   />
                   {!isCurrentUser && (
                     <button
@@ -733,7 +728,7 @@ function MembersSection({
                     ) : (
                       roles.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.nombre}
+                          {roleOptionLabel(r.nombre)}
                         </option>
                       ))
                     )}
@@ -785,7 +780,7 @@ function MembersSection({
                     ) : (
                       roles.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.nombre}
+                          {roleOptionLabel(r.nombre)}
                         </option>
                       ))
                     )}
@@ -856,16 +851,10 @@ function MembersSection({
 
 function RoleBadge({
   role,
-  adminRoleId,
-  roleId,
-  roleName,
 }: {
   role: 'admin' | 'campo'
-  adminRoleId: string | undefined
-  roleId: string
-  roleName?: string
 }) {
-  const isAdmin = role === 'admin' || roleId === adminRoleId
+  const isAdmin = role === 'admin'
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${isAdmin ? 'bg-bovi/10 text-bovi' : 'bg-amber-100 text-amber-800'
@@ -876,7 +865,14 @@ function RoleBadge({
       ) : (
         <Tractor className="size-3" />
       )}
-      {roleName ?? (isAdmin ? 'Admin' : 'Campo')}
+      {isAdmin ? 'Administrador' : 'Personal de campo'}
     </span>
   )
+}
+
+function roleOptionLabel(name: string) {
+  const roleName = name.trim().toUpperCase()
+  if (roleName === 'ADMINISTRADOR') return 'Administrador'
+  if (roleName === 'PERSONAL_CAMPO') return 'Personal de campo'
+  return name
 }

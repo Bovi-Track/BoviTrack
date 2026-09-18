@@ -6,6 +6,7 @@ import FarmManagePage from './pages/FarmManagePage.tsx'
 import HomePage from './pages/HomePage.tsx'
 import JoinFarmPage from './pages/JoinFarmPage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import PurchasesPage from './pages/PurchasesPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx'
 import SectionPage from './pages/SectionPage.tsx'
@@ -47,6 +48,7 @@ function App() {
         }
       >
         <Route path="/inicio" element={<HomePage />} />
+        <Route path="/compras" element={<PurchasesPage />} />
         <Route
           path="/toros"
           element={
