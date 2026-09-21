@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { FileText } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
 import { roleLabel } from '../lib/dashboard.ts'
@@ -33,10 +34,17 @@ export default function SettingsPage() {
           {roleLabel(role)}
           {activeFarm ? ` · ${activeFarm.nombre}` : ''}
         </p>
+        <Link
+          to="/reporte"
+          className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-stone-200 text-sm font-medium text-stone-800 transition hover:bg-cream"
+        >
+          <FileText className="size-4 text-bovi" />
+          Generar reporte PDF
+        </Link>
         <button
           type="button"
           onClick={onLogout}
-          className="mt-6 min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover"
+          className="mt-3 min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover"
         >
           Cerrar sesión
         </button>

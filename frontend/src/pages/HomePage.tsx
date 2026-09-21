@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Bell,
   ChevronDown,
+  ClipboardList,
   FileText,
   Plus,
   ShoppingBag,
@@ -346,7 +347,14 @@ export default function HomePage() {
       <section className="mt-5 space-y-4">
         {role === 'campo' ? (
           <>
-            <Card title="Mis tareas del día">
+            <Card
+              title="Mis tareas del día"
+              action={
+                <Link to="/tareas" className="text-sm font-medium text-bovi">
+                  Ver todas
+                </Link>
+              }
+            >
               {tasks.length === 0 ? (
                 <p className="text-sm text-stone-400">
                   No hay tareas asignadas para hoy.
@@ -410,6 +418,11 @@ export default function HomePage() {
                 </ul>
               )}
             </Card>
+            <Shortcut
+              to="/tareas"
+              icon={<ClipboardList className="size-5" />}
+              label="Asignar y ver tareas"
+            />
           </>
         ) : (
           <>
@@ -439,9 +452,9 @@ export default function HomePage() {
                 </ul>
               )}
             </Card>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2">
               <Shortcut
-                to="/ajustes"
+                to="/reporte"
                 icon={<FileText className="size-5" />}
                 label="Generar reporte PDF"
               />
@@ -454,6 +467,11 @@ export default function HomePage() {
                 to="/compras"
                 icon={<ShoppingBag className="size-5" />}
                 label="Compras en subasta"
+              />
+              <Shortcut
+                to="/tareas"
+                icon={<ClipboardList className="size-5" />}
+                label="Tareas del equipo"
               />
             </div>
           </>
@@ -497,16 +515,19 @@ function MetricCard({
 
 function Card({
   title,
+  action,
   children,
 }: {
   title: string
+  action?: ReactNode
   children: ReactNode
 }) {
   return (
     <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
-      <h2 className="mb-3 font-serif text-xl font-semibold text-stone-900">
-        {title}
-      </h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="font-serif text-xl font-semibold text-stone-900">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   )

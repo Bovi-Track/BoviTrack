@@ -3,14 +3,18 @@ import { useAuth } from './auth/AuthProvider.tsx'
 import { AppShell } from './components/dashboard/AppShell.tsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.tsx'
 import FarmManagePage from './pages/FarmManagePage.tsx'
+import BullsPage from './pages/BullsPage.tsx'
 import HomePage from './pages/HomePage.tsx'
+import InventoryPage from './pages/InventoryPage.tsx'
 import JoinFarmPage from './pages/JoinFarmPage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import PurchasesPage from './pages/PurchasesPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
+import ReportPage from './pages/ReportPage.tsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx'
-import SectionPage from './pages/SectionPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
+import TasksPage from './pages/TasksPage.tsx'
+import WeighingsPage from './pages/WeighingsPage.tsx'
 import type { ReactNode } from 'react'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -49,33 +53,11 @@ function App() {
       >
         <Route path="/inicio" element={<HomePage />} />
         <Route path="/compras" element={<PurchasesPage />} />
-        <Route
-          path="/toros"
-          element={
-            <SectionPage
-              title="Toros"
-              description="Aquí verás el inventario de bovinos de la finca activa. Por ahora registra animales desde el dashboard con Agregar bovino."
-            />
-          }
-        />
-        <Route
-          path="/pesajes"
-          element={
-            <SectionPage
-              title="Pesajes"
-              description="El historial detallado de pesajes llegará aquí. La captura rápida ya está disponible en Inicio."
-            />
-          }
-        />
-        <Route
-          path="/inventario"
-          element={
-            <SectionPage
-              title="Inventario"
-              description="Registra movimientos de bodega e insumos desde este módulo cuando esté habilitado."
-            />
-          }
-        />
+        <Route path="/toros" element={<BullsPage />} />
+        <Route path="/tareas" element={<TasksPage />} />
+        <Route path="/pesajes" element={<WeighingsPage />} />
+        <Route path="/inventario" element={<InventoryPage />} />
+        <Route path="/reporte" element={<ReportPage />} />
         <Route path="/finca" element={<FarmManagePage />} />
         <Route path="/ajustes" element={<SettingsPage />} />
       </Route>
