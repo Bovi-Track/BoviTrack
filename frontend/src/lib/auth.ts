@@ -49,7 +49,7 @@ export async function registrarUsuario(
         nombre_completo: nombreCompleto.trim(),
         username: username.trim(),
       },
-      emailRedirectTo: `${window.location.origin}/iniciar-sesion`,
+      emailRedirectTo: `${appOrigin()}/iniciar-sesion`,
     },
   })
 }
@@ -72,8 +72,15 @@ export async function iniciarSesion(
   return supabase.auth.signInWithPassword({ email, password })
 }
 
+export function appOrigin() {
+  if (typeof window !== 'undefined' && window.location.origin) {
+    return window.location.origin.replace(/\/$/, '')
+  }
+  return 'https://bovitrack.pages.dev'
+}
+
 export function recoveryRedirectUrl() {
-  return `${window.location.origin}/restablecer-contrasena`
+  return `${appOrigin()}/restablecer-contrasena`
 }
 
 export async function solicitarRestablecimiento(identifier: string) {

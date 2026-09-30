@@ -1,5 +1,5 @@
 import { Lock } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider.tsx'
 import { AuthField } from '../components/auth/AuthField.tsx'
@@ -11,6 +11,17 @@ import {
   validarPasswordRegistro,
 } from '../lib/passwordPolicy.ts'
 
+function hasRecoveryCallback() {
+  const search = new URLSearchParams(window.location.search)
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  return (
+    search.has('code') ||
+    search.get('type') === 'recovery' ||
+    hash.get('type') === 'recovery' ||
+    hash.has('access_token')
+  )
+}
+
 export default function ResetPasswordPage() {
   const { user, loading, clearPasswordRecovery } = useAuth()
   const navigate = useNavigate()
@@ -18,6 +29,17 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [waitingCallback, setWaitingCallback] = useState(hasRecoveryCallback)
+
+  useEffect(() => {
+    if (!waitingCallback) return
+    if (user) {
+      setWaitingCallback(false)
+      return
+    }
+    const timer = window.setTimeout(() => setWaitingCallback(false), 8000)
+    return () => window.clearTimeout(timer)
+  }, [user, waitingCallback])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -47,7 +69,7 @@ export default function ResetPasswordPage() {
     navigate('/inicio', { replace: true })
   }
 
-  if (loading) {
+  if (loading || waitingCallback) {
     return (
       <div className="flex min-h-svh items-center justify-center bg-cream text-stone-500">
         Cargando…
