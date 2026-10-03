@@ -1,9 +1,19 @@
 import { Plus, Scale, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useAuth } from '../auth/AuthProvider.tsx'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
-import { bovineLabel, loadBovines, loadWeighings, todayIso } from '../lib/dashboard.ts'
+import {
+  bovineLabel,
+  loadBovines,
+  loadWeighings,
+  readPendingWeighings,
+  saveWeighing,
+  todayIso,
+  weighingErrorMessage,
+  writePendingWeighings,
+} from '../lib/dashboard.ts'
 import type { Bovine, Weighing } from '../types/dashboard.ts'
 
 type WeighingRow = Weighing & { bovine?: Bovine }
@@ -16,13 +26,19 @@ const emptyForm = {
 }
 
 export default function WeighingsPage() {
+  const { user } = useAuth()
   const { activeFarm, loading } = useFarm()
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [rows, setRows] = useState<WeighingRow[]>([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
-  const [toast, setToast] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState<{
+    message: string
+    tone: 'ok' | 'warn' | 'error'
+  } | null>(null)
 
   useEffect(() => {
     if (!toast) return
@@ -51,7 +67,12 @@ export default function WeighingsPage() {
             .map((item) => ({ ...item, bovine: byId.get(item.bovino_id) })),
         )
       } catch {
-        if (active) setToast('No se pudieron cargar los pesajes.')
+        if (active) {
+          setToast({
+            message: 'No se pudieron cargar los pesajes.',
+            tone: 'error',
+          })
+        }
       }
     }
     void load()
@@ -66,7 +87,7 @@ export default function WeighingsPage() {
     return rows.filter((item) => {
       const bovine = item.bovine
       const label = bovine
-        ? `${bovine.nombre ?? ''} ${bovine.identificador_interno} ${bovine.numero_diio}`
+        ? `${bovine.nombre ?? ''} ${bovine.identificador_interno} ${bovine.numero_diio ?? ''}`
         : item.bovino_id
       return label.toLowerCase().includes(term)
     })
@@ -76,11 +97,57 @@ export default function WeighingsPage() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function addRow(payload: Weighing) {
+    const bovine = bovines.find((item) => item.id === payload.bovino_id)
+    setRows((current) => [{ ...payload, bovine }, ...current])
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setOpen(false)
-    setForm({ ...emptyForm, fecha_pesaje: todayIso() })
-    setToast('Interfaz lista. El guardado de pesajes se habilitará pronto.')
+    const peso = Number(form.peso_kg)
+    if (!form.bovino_id) {
+      setError('Selecciona un bovino.')
+      return
+    }
+    if (!Number.isFinite(peso) || peso <= 0) {
+      setError('Ingresa un peso válido en kg.')
+      return
+    }
+
+    const payload = {
+      bovino_id: form.bovino_id,
+      peso_kg: peso,
+      fecha_pesaje: form.fecha_pesaje,
+    }
+
+    setError('')
+    setSubmitting(true)
+    try {
+      if (!navigator.onLine) {
+        writePendingWeighings([...readPendingWeighings(), payload])
+        addRow({
+          id: crypto.randomUUID(),
+          ...payload,
+        })
+        setOpen(false)
+        setForm({ ...emptyForm, fecha_pesaje: todayIso() })
+        setToast({
+          message: 'Guardado local. Se sincronizará al volver online.',
+          tone: 'warn',
+        })
+        return
+      }
+
+      const saved = await saveWeighing(payload, user?.id)
+      addRow(saved)
+      setOpen(false)
+      setForm({ ...emptyForm, fecha_pesaje: todayIso() })
+      setToast({ message: 'Pesaje guardado en la finca.', tone: 'ok' })
+    } catch (cause) {
+      setError(weighingErrorMessage(cause))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (loading) {
@@ -89,7 +156,7 @@ export default function WeighingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-6 pb-10">
-      {toast ? <Toast message={toast} tone="warn" /> : null}
+      {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
 
       <header className="mb-5 flex items-start justify-between gap-3">
         <div>
@@ -107,7 +174,10 @@ export default function WeighingsPage() {
         </div>
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setError('')
+            setOpen(true)
+          }}
           disabled={!activeFarm}
           className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -133,7 +203,7 @@ export default function WeighingsPage() {
             Sin pesajes para mostrar
           </p>
           <p className="mt-1 text-sm text-stone-500">
-            Usa Agregar para ver el formulario de captura.
+            Usa Agregar o el pesaje rápido de Inicio para registrar el primero.
           </p>
         </section>
       ) : (
@@ -164,7 +234,11 @@ export default function WeighingsPage() {
         open={open}
         onClose={() => setOpen(false)}
         title="Agregar pesaje"
-        description="Vista previa del formulario. El registro aún no se guarda."
+        description={
+          activeFarm
+            ? `Se guardará en ${activeFarm.nombre}.`
+            : 'Selecciona una finca activa para guardar.'
+        }
       >
         <form onSubmit={onSubmit} className="space-y-4">
           <Field id="pesaje-bovino" label="Bovino">
@@ -222,11 +296,17 @@ export default function WeighingsPage() {
               placeholder="Condición corporal, lote, etc."
             />
           </Field>
+          {error ? (
+            <p className="text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          ) : null}
           <button
             type="submit"
-            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover"
+            disabled={submitting || !activeFarm}
+            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Guardar pesaje
+            {submitting ? 'Guardando…' : 'Guardar pesaje'}
           </button>
         </form>
       </Modal>

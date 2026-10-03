@@ -19,12 +19,34 @@ export type FarmMember = {
 export type Bovine = {
   id: string
   finca_id: string
-  numero_diio: string
+  numero_diio: string | null
   identificador_interno: string
   nombre: string | null
   raza: string | null
+  color: string | null
   sexo: 'MACHO' | 'HEMBRA'
   estado: 'ACTIVO' | 'INACTIVO' | 'VENDIDO' | 'BAJA' | 'MUERTO'
+}
+
+export type BovineStatus = Bovine['estado']
+
+export type CreateBovineInput = {
+  finca_id: string
+  numero_diio: string | null
+  identificador_interno: string
+  nombre: string | null
+  raza: string | null
+  color: string | null
+  sexo: 'MACHO' | 'HEMBRA'
+  fecha_nacimiento: string | null
+  fecha_ingreso: string
+}
+
+export type UpdateBovineInput = {
+  nombre: string | null
+  raza: string | null
+  color: string | null
+  estado: BovineStatus
 }
 
 export type Task = {

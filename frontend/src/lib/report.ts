@@ -166,7 +166,7 @@ export function buildReportHtml(data: ReportData, selection: ReportSelection) {
               (item) => `
                 <tr>
                   <td>${escapeHtml(item.identificador_interno)}</td>
-                  <td>${escapeHtml(item.numero_diio)}</td>
+                  <td>${escapeHtml(item.numero_diio ?? '—')}</td>
                   <td>${escapeHtml(item.nombre ?? '—')}</td>
                   <td>${item.sexo === 'MACHO' ? 'Macho' : 'Hembra'}${item.raza ? ` · ${escapeHtml(item.raza)}` : ''}</td>
                   <td>${statusLabel(item.estado)}</td>

@@ -8,7 +8,7 @@ type AddBovineModalProps = {
   farmName: string
   onClose: () => void
   onCreate: (payload: {
-    numero_diio: string
+    numero_diio: string | null
     identificador_interno: string
     nombre: string | null
     raza: string | null
@@ -50,7 +50,7 @@ export function AddBovineModal({
     setSubmitting(true)
     try {
       await onCreate({
-        numero_diio: form.numero_diio.trim(),
+        numero_diio: form.numero_diio.trim() || null,
         identificador_interno: form.identificador_interno.trim(),
         nombre: form.nombre.trim() || null,
         raza: form.raza.trim() || null,
@@ -92,10 +92,9 @@ export function AddBovineModal({
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="diio" label="Número DIIO-SENASA">
+          <Field id="diio" label="Número DIIO-SENASA (opcional)">
             <input
               id="diio"
-              required
               maxLength={50}
               value={form.numero_diio}
               onChange={(event) => update('numero_diio', event.target.value)}
@@ -158,7 +157,7 @@ export function AddBovineModal({
               placeholder="Negro"
             />
           </Field>
-          <Field id="nacimiento" label="Fecha de nacimiento">
+          <Field id="nacimiento" label="Fecha de nacimiento (opcional)">
             <input
               id="nacimiento"
               type="date"

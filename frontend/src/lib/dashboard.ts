@@ -1,6 +1,7 @@
 import { supabase } from './supabase.ts'
 import type {
   Bovine,
+  CreateBovineInput,
   DashboardMetrics,
   Farm,
   FarmRole,
@@ -8,8 +9,27 @@ import type {
   SaleHint,
   Task,
   Treatment,
+  UpdateBovineInput,
   Weighing,
 } from '../types/dashboard.ts'
+
+const BOVINE_COLUMNS =
+  'id, finca_id, numero_diio, identificador_interno, nombre, raza, color, sexo, estado'
+
+export function bovineErrorMessage(cause: unknown) {
+  const error = cause as { code?: string; message?: string } | null
+  if (error?.code === '23505') {
+    return 'Ya existe un bovino con ese número DIIO o identificador interno.'
+  }
+  if (error?.message) return error.message
+  return 'No se pudo guardar el bovino.'
+}
+
+export function weighingErrorMessage(cause: unknown) {
+  const error = cause as { message?: string } | null
+  if (error?.message) return error.message
+  return 'No se pudo guardar el pesaje.'
+}
 
 const ACTIVE_FARM_KEY = 'bovitrack-active-farm'
 const PENDING_WEIGHS_KEY = 'bovitrack-pending-pesajes'
@@ -99,9 +119,7 @@ export async function createFarm(nombre: string, ubicacion: string) {
 export async function loadBovines(farmId: string) {
   const { data, error } = await supabase
     .from('bovino')
-    .select(
-      'id, finca_id, numero_diio, identificador_interno, nombre, raza, sexo, estado',
-    )
+    .select(BOVINE_COLUMNS)
     .eq('finca_id', farmId)
     .order('created_at', { ascending: false })
 
@@ -109,23 +127,28 @@ export async function loadBovines(farmId: string) {
   return (data ?? []) as Bovine[]
 }
 
-export async function createBovine(payload: {
-  finca_id: string
-  numero_diio: string
-  identificador_interno: string
-  nombre: string | null
-  raza: string | null
-  color: string | null
-  sexo: 'MACHO' | 'HEMBRA'
-  fecha_nacimiento: string | null
-  fecha_ingreso: string
-}) {
+export async function createBovine(payload: CreateBovineInput) {
+  const created = await createBovines([payload])
+  if (!created[0]) throw new Error('No se pudo guardar el bovino.')
+  return created[0]
+}
+
+export async function createBovines(payloads: CreateBovineInput[]) {
   const { data, error } = await supabase
     .from('bovino')
-    .insert(payload)
-    .select(
-      'id, finca_id, numero_diio, identificador_interno, nombre, raza, sexo, estado',
-    )
+    .insert(payloads)
+    .select(BOVINE_COLUMNS)
+
+  if (error) throw error
+  return (data ?? []) as Bovine[]
+}
+
+export async function updateBovine(id: string, patch: UpdateBovineInput) {
+  const { data, error } = await supabase
+    .from('bovino')
+    .update(patch)
+    .eq('id', id)
+    .select(BOVINE_COLUMNS)
     .single()
 
   if (error) throw error
@@ -151,14 +174,22 @@ export async function saveWeighing(
   payload: PendingWeighing,
   userId: string | undefined,
 ) {
-  const { error } = await supabase.from('pesaje').insert({
-    bovino_id: payload.bovino_id,
-    peso_kg: payload.peso_kg,
-    fecha_pesaje: payload.fecha_pesaje,
-    registrado_por: userId ?? null,
-    es_inicial: false,
-  })
+  const { data, error } = await supabase
+    .from('pesaje')
+    .insert({
+      bovino_id: payload.bovino_id,
+      peso_kg: payload.peso_kg,
+      fecha_pesaje: payload.fecha_pesaje,
+      registrado_por: userId ?? null,
+      es_inicial: false,
+    })
+    .select('id, bovino_id, peso_kg, fecha_pesaje')
+    .single()
   if (error) throw error
+  return {
+    ...data,
+    peso_kg: Number(data.peso_kg),
+  } as Weighing
 }
 
 export async function loadTasks(farmId: string, userId: string) {
@@ -293,7 +324,9 @@ export function saleHints(bovines: Bovine[], weighings: Weighing[]): SaleHint[] 
 }
 
 export function bovineLabel(bovine: Pick<Bovine, 'nombre' | 'numero_diio' | 'identificador_interno'>) {
-  return bovine.nombre
-    ? `${bovine.nombre} · ${bovine.identificador_interno}`
-    : `${bovine.identificador_interno} · DIIO ${bovine.numero_diio}`
+  if (bovine.nombre) return `${bovine.nombre} · ${bovine.identificador_interno}`
+  if (bovine.numero_diio) {
+    return `${bovine.identificador_interno} · DIIO ${bovine.numero_diio}`
+  }
+  return bovine.identificador_interno
 }

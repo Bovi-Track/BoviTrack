@@ -140,7 +140,9 @@ export function QuickWeighCard({
                     }`}
                   >
                     <span>{bovineLabel(item)}</span>
-                    <span className="text-xs opacity-80">{item.numero_diio}</span>
+                    {item.numero_diio ? (
+                      <span className="text-xs opacity-80">{item.numero_diio}</span>
+                    ) : null}
                   </button>
                 </li>
               ))}

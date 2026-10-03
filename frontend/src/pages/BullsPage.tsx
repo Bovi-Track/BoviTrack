@@ -3,29 +3,72 @@ import {
   Bug,
   ChevronLeft,
   ChevronRight,
+  Pencil,
   Pill,
   Plus,
   Search,
   Stethoscope,
   Syringe,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
-import { bovineLabel, loadBovines, todayIso } from '../lib/dashboard.ts'
-import type { Bovine } from '../types/dashboard.ts'
+import {
+  bovineErrorMessage,
+  bovineLabel,
+  createBovines,
+  loadBovines,
+  loadWeighings,
+  todayIso,
+  updateBovine,
+} from '../lib/dashboard.ts'
+import type { Bovine, BovineStatus, Weighing } from '../types/dashboard.ts'
 
-const emptyForm = {
-  numero_diio: '',
-  identificador_interno: '',
-  nombre: '',
-  raza: '',
-  color: '',
-  sexo: 'MACHO',
-  fecha_nacimiento: '',
-  fecha_ingreso: todayIso(),
+type BullDraft = {
+  localId: string
+  numero_diio: string
+  identificador_interno: string
+  nombre: string
+  raza: string
+  color: string
+  sexo: 'MACHO' | 'HEMBRA'
+  fecha_nacimiento: string
+  fecha_ingreso: string
+}
+
+type DraftField = Exclude<keyof BullDraft, 'localId'>
+
+type EditForm = {
+  nombre: string
+  raza: string
+  color: string
+  estado: BovineStatus
+}
+
+function newDraft(): BullDraft {
+  return {
+    localId: crypto.randomUUID(),
+    numero_diio: '',
+    identificador_interno: '',
+    nombre: '',
+    raza: '',
+    color: '',
+    sexo: 'MACHO',
+    fecha_nacimiento: '',
+    fecha_ingreso: todayIso(),
+  }
+}
+
+function editFrom(bovine: Bovine): EditForm {
+  return {
+    nombre: bovine.nombre ?? '',
+    raza: bovine.raza ?? '',
+    color: bovine.color ?? '',
+    estado: bovine.estado,
+  }
 }
 
 const statusLabel: Record<Bovine['estado'], string> = {
@@ -183,10 +226,24 @@ function worstStatus(records: SanitaryRecord[]): PlanStatus {
 export default function BullsPage() {
   const { activeFarm, loading } = useFarm()
   const [bovines, setBovines] = useState<Bovine[]>([])
+  const [weighings, setWeighings] = useState<Weighing[]>([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(emptyForm)
-  const [toast, setToast] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<BullDraft[]>(() => [newDraft()])
+  const [addError, setAddError] = useState('')
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState<EditForm>({
+    nombre: '',
+    raza: '',
+    color: '',
+    estado: 'ACTIVO',
+  })
+  const [editError, setEditError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [toast, setToast] = useState<{
+    message: string
+    tone: 'ok' | 'warn' | 'error'
+  } | null>(null)
   const [view, setView] = useState<'hato' | 'sanidad'>('hato')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [records, setRecords] = useState<SanitaryRecord[]>([])
@@ -209,17 +266,25 @@ export default function BullsPage() {
   useEffect(() => {
     if (!activeFarm) {
       setBovines([])
+      setWeighings([])
       return
     }
     const farmId = activeFarm.id
     let active = true
-    loadBovines(farmId)
-      .then((rows) => {
-        if (active) setBovines(rows)
-      })
-      .catch(() => {
-        if (active) setToast('No se pudieron cargar los toros.')
-      })
+    async function load() {
+      try {
+        const rows = await loadBovines(farmId)
+        const nextWeighings = await loadWeighings(rows.map((item) => item.id))
+        if (!active) return
+        setBovines(rows)
+        setWeighings(nextWeighings)
+      } catch {
+        if (active) {
+          setToast({ message: 'No se pudieron cargar los toros.', tone: 'error' })
+        }
+      }
+    }
+    void load()
     return () => {
       active = false
     }
@@ -229,7 +294,7 @@ export default function BullsPage() {
     const term = query.trim().toLowerCase()
     if (!term) return bovines
     return bovines.filter((item) =>
-      [item.nombre ?? '', item.identificador_interno, item.numero_diio, item.raza ?? '']
+      [item.nombre ?? '', item.identificador_interno, item.numero_diio ?? '', item.raza ?? '']
         .join(' ')
         .toLowerCase()
         .includes(term),
@@ -258,19 +323,102 @@ export default function BullsPage() {
     })
   }, [bovines, kindFilter, query, records])
 
-  function update(key: keyof typeof emptyForm, value: string) {
-    setForm((current) => ({ ...current, [key]: value }))
+  function updateDraft(localId: string, key: DraftField, value: string) {
+    setDrafts((current) =>
+      current.map((draft) =>
+        draft.localId === localId ? { ...draft, [key]: value } : draft,
+      ),
+    )
   }
 
   function updatePlan(key: keyof ReturnType<typeof emptyPlan>, value: string) {
     setPlanForm((current) => ({ ...current, [key]: value }))
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function openAdd() {
+    setDrafts([newDraft()])
+    setAddError('')
+    setOpen(true)
+  }
+
+  function openEdit() {
+    if (!selected) return
+    setEditForm(editFrom(selected))
+    setEditError('')
+    setEditOpen(true)
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setOpen(false)
-    setForm({ ...emptyForm, fecha_ingreso: todayIso() })
-    setToast('Interfaz lista. El guardado de toros se habilitará pronto.')
+    if (!activeFarm) {
+      setAddError('Selecciona una finca activa desde Inicio.')
+      return
+    }
+
+    const payloads = drafts.map((draft) => ({
+      finca_id: activeFarm.id,
+      numero_diio: draft.numero_diio.trim() || null,
+      identificador_interno: draft.identificador_interno.trim(),
+      nombre: draft.nombre.trim() || null,
+      raza: draft.raza.trim() || null,
+      color: draft.color.trim() || null,
+      sexo: draft.sexo,
+      fecha_nacimiento: draft.fecha_nacimiento || null,
+      fecha_ingreso: draft.fecha_ingreso,
+    }))
+
+    const diios = payloads
+      .map((item) => item.numero_diio?.toLowerCase())
+      .filter((value): value is string => Boolean(value))
+    const internals = payloads.map((item) => item.identificador_interno.toLowerCase())
+    if (new Set(diios).size !== diios.length || new Set(internals).size !== internals.length) {
+      setAddError('Los números DIIO y los identificadores internos no pueden repetirse.')
+      return
+    }
+
+    setAddError('')
+    setSubmitting(true)
+    try {
+      const created = await createBovines(payloads)
+      setBovines((current) => [...created, ...current])
+      setOpen(false)
+      setDrafts([newDraft()])
+      setToast({
+        message:
+          created.length === 1
+            ? 'Toro guardado en la finca activa.'
+            : `${created.length} toros guardados en la finca activa.`,
+        tone: 'ok',
+      })
+    } catch (cause) {
+      setAddError(bovineErrorMessage(cause))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function onSubmitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selected) return
+    setEditError('')
+    setSubmitting(true)
+    try {
+      const updated = await updateBovine(selected.id, {
+        nombre: editForm.nombre.trim() || null,
+        raza: editForm.raza.trim() || null,
+        color: editForm.color.trim() || null,
+        estado: editForm.estado,
+      })
+      setBovines((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      )
+      setEditOpen(false)
+      setToast({ message: 'Ficha del bovino actualizada.', tone: 'ok' })
+    } catch (cause) {
+      setEditError(bovineErrorMessage(cause))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function openPlan(bovinoId: string, tipo: SanitaryKind = 'VACUNACION') {
@@ -297,7 +445,10 @@ export default function BullsPage() {
     setKindFilter('TODOS')
     setPlanOpen(false)
     setPlanForm(emptyPlan())
-    setToast('Vista previa. La aplicación quedó en esta sesión y aún no se guarda.')
+    setToast({
+      message: 'Vista previa. La aplicación quedó en esta sesión y aún no se guarda.',
+      tone: 'warn',
+    })
   }
 
   function removeRecord(id: string) {
@@ -312,11 +463,12 @@ export default function BullsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-6 pb-10">
-      {toast ? <Toast message={toast} tone="warn" /> : null}
+      {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
 
       {selected ? (
         <BullSanitaryDetail
           bovine={selected}
+          weighings={weighings.filter((item) => item.bovino_id === selected.id)}
           records={records.filter((item) => item.bovino_id === selected.id)}
           kindFilter={kindFilter}
           onKindFilter={setKindFilter}
@@ -324,6 +476,7 @@ export default function BullsPage() {
             setSelectedId(null)
             setKindFilter('TODOS')
           }}
+          onEdit={openEdit}
           onRegister={(tipo) => openPlan(selected.id, tipo)}
           onRemove={removeRecord}
         />
@@ -345,7 +498,7 @@ export default function BullsPage() {
             </div>
             <button
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={openAdd}
               disabled={!activeFarm}
               className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -407,7 +560,7 @@ export default function BullsPage() {
                   Sin toros para mostrar
                 </p>
                 <p className="mt-1 text-sm text-stone-500">
-                  Usa Agregar para ver el formulario de registro.
+                  Usa Agregar para registrar uno o varios toros.
                 </p>
               </section>
             ) : (
@@ -441,8 +594,9 @@ export default function BullsPage() {
                           <div>
                             <p className="font-medium text-stone-900">{bovineLabel(item)}</p>
                             <p className="mt-1 text-xs text-stone-500">
-                              DIIO {item.numero_diio}
+                              {item.numero_diio ? `DIIO ${item.numero_diio}` : 'Sin DIIO'}
                               {item.raza ? ` · ${item.raza}` : ''}
+                              {item.color ? ` · ${item.color}` : ''}
                               {` · ${item.sexo === 'MACHO' ? 'Macho' : 'Hembra'}`}
                             </p>
                           </div>
@@ -494,104 +648,260 @@ export default function BullsPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Agregar toro"
-        description="Vista previa del formulario. El registro aún no se guarda."
+        title={drafts.length === 1 ? 'Agregar toro' : `Agregar ${drafts.length} toros`}
+        description={
+          activeFarm
+            ? `Se registrarán en ${activeFarm.nombre}. Puedes cargar varios de una vez.`
+            : 'Selecciona una finca activa para guardar.'
+        }
       >
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="toro-diio" label="Número DIIO-SENASA">
-              <input
-                id="toro-diio"
-                required
-                maxLength={50}
-                value={form.numero_diio}
-                onChange={(event) => update('numero_diio', event.target.value)}
-                className={fieldClass}
-                placeholder="CL-000123"
-              />
-            </Field>
-            <Field id="toro-interno" label="Identificador interno">
-              <input
-                id="toro-interno"
-                required
-                maxLength={50}
-                value={form.identificador_interno}
-                onChange={(event) =>
-                  update('identificador_interno', event.target.value)
-                }
-                className={fieldClass}
-                placeholder="T-014"
-              />
-            </Field>
-            <Field id="toro-nombre" label="Nombre (opcional)">
-              <input
-                id="toro-nombre"
-                maxLength={100}
-                value={form.nombre}
-                onChange={(event) => update('nombre', event.target.value)}
-                className={fieldClass}
-                placeholder="Relámpago"
-              />
-            </Field>
-            <Field id="toro-sexo" label="Sexo">
-              <select
-                id="toro-sexo"
-                required
-                value={form.sexo}
-                onChange={(event) => update('sexo', event.target.value)}
-                className={fieldClass}
+          {drafts.map((draft, index) => {
+            const prefix = `toro-${draft.localId}`
+            return (
+              <div
+                key={draft.localId}
+                className="rounded-2xl border border-stone-200 bg-white p-4"
               >
-                <option value="MACHO">Macho</option>
-                <option value="HEMBRA">Hembra</option>
-              </select>
-            </Field>
-            <Field id="toro-raza" label="Raza (opcional)">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-stone-800">
+                    Toro {index + 1}
+                  </p>
+                  {drafts.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDrafts((current) =>
+                          current.filter((item) => item.localId !== draft.localId),
+                        )
+                      }
+                      className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Quitar
+                    </button>
+                  ) : null}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field id={`${prefix}-diio`} label="Número DIIO-SENASA (opcional)">
+                    <input
+                      id={`${prefix}-diio`}
+                      maxLength={50}
+                      value={draft.numero_diio}
+                      onChange={(event) =>
+                        updateDraft(draft.localId, 'numero_diio', event.target.value)
+                      }
+                      className={fieldClass}
+                      placeholder="CL-000123"
+                    />
+                  </Field>
+                  <Field id={`${prefix}-interno`} label="Identificador interno">
+                    <input
+                      id={`${prefix}-interno`}
+                      required
+                      maxLength={50}
+                      value={draft.identificador_interno}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.localId,
+                          'identificador_interno',
+                          event.target.value,
+                        )
+                      }
+                      className={fieldClass}
+                      placeholder="T-014"
+                    />
+                  </Field>
+                  <Field id={`${prefix}-nombre`} label="Nombre (opcional)">
+                    <input
+                      id={`${prefix}-nombre`}
+                      maxLength={100}
+                      value={draft.nombre}
+                      onChange={(event) =>
+                        updateDraft(draft.localId, 'nombre', event.target.value)
+                      }
+                      className={fieldClass}
+                      placeholder="Relámpago"
+                    />
+                  </Field>
+                  <Field id={`${prefix}-sexo`} label="Sexo">
+                    <select
+                      id={`${prefix}-sexo`}
+                      required
+                      value={draft.sexo}
+                      onChange={(event) =>
+                        updateDraft(draft.localId, 'sexo', event.target.value)
+                      }
+                      className={fieldClass}
+                    >
+                      <option value="MACHO">Macho</option>
+                      <option value="HEMBRA">Hembra</option>
+                    </select>
+                  </Field>
+                  <Field id={`${prefix}-raza`} label="Raza (opcional)">
+                    <input
+                      id={`${prefix}-raza`}
+                      maxLength={50}
+                      value={draft.raza}
+                      onChange={(event) =>
+                        updateDraft(draft.localId, 'raza', event.target.value)
+                      }
+                      className={fieldClass}
+                      placeholder="Angus"
+                    />
+                  </Field>
+                  <Field id={`${prefix}-color`} label="Color (opcional)">
+                    <input
+                      id={`${prefix}-color`}
+                      maxLength={20}
+                      value={draft.color}
+                      onChange={(event) =>
+                        updateDraft(draft.localId, 'color', event.target.value)
+                      }
+                      className={fieldClass}
+                      placeholder="Negro"
+                    />
+                  </Field>
+                  <Field id={`${prefix}-nacimiento`} label="Fecha de nacimiento (opcional)">
+                    <input
+                      id={`${prefix}-nacimiento`}
+                      type="date"
+                      value={draft.fecha_nacimiento}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.localId,
+                          'fecha_nacimiento',
+                          event.target.value,
+                        )
+                      }
+                      className={fieldClass}
+                    />
+                  </Field>
+                  <Field id={`${prefix}-ingreso`} label="Fecha de ingreso">
+                    <input
+                      id={`${prefix}-ingreso`}
+                      type="date"
+                      required
+                      value={draft.fecha_ingreso}
+                      onChange={(event) =>
+                        updateDraft(draft.localId, 'fecha_ingreso', event.target.value)
+                      }
+                      className={fieldClass}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setDrafts((current) => [...current, newDraft()])}
+            className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-bovi/40 bg-bovi/5 text-sm font-semibold text-bovi hover:bg-bovi/10"
+          >
+            <Plus className="size-4" />
+            Agregar otro toro
+          </button>
+          {addError ? (
+            <p className="text-sm text-red-600" role="alert">
+              {addError}
+            </p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={submitting || !activeFarm}
+            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {submitting
+              ? 'Guardando…'
+              : drafts.length === 1
+                ? 'Guardar toro'
+                : `Guardar ${drafts.length} toros`}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Editar bovino"
+        description={
+          selected
+            ? `${bovineLabel(selected)}${selected.numero_diio ? ` · DIIO ${selected.numero_diio}` : ''}`
+            : undefined
+        }
+      >
+        <form onSubmit={onSubmitEdit} className="space-y-4">
+          <Field id="edit-nombre" label="Nombre">
+            <input
+              id="edit-nombre"
+              maxLength={100}
+              value={editForm.nombre}
+              onChange={(event) =>
+                setEditForm((current) => ({ ...current, nombre: event.target.value }))
+              }
+              className={fieldClass}
+              placeholder="Relámpago"
+            />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field id="edit-raza" label="Raza">
               <input
-                id="toro-raza"
+                id="edit-raza"
                 maxLength={50}
-                value={form.raza}
-                onChange={(event) => update('raza', event.target.value)}
+                value={editForm.raza}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, raza: event.target.value }))
+                }
                 className={fieldClass}
                 placeholder="Angus"
               />
             </Field>
-            <Field id="toro-color" label="Color (opcional)">
+            <Field id="edit-color" label="Color">
               <input
-                id="toro-color"
+                id="edit-color"
                 maxLength={20}
-                value={form.color}
-                onChange={(event) => update('color', event.target.value)}
+                value={editForm.color}
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, color: event.target.value }))
+                }
                 className={fieldClass}
                 placeholder="Negro"
               />
             </Field>
-            <Field id="toro-nacimiento" label="Fecha de nacimiento">
-              <input
-                id="toro-nacimiento"
-                type="date"
-                value={form.fecha_nacimiento}
-                onChange={(event) =>
-                  update('fecha_nacimiento', event.target.value)
-                }
-                className={fieldClass}
-              />
-            </Field>
-            <Field id="toro-ingreso" label="Fecha de ingreso">
-              <input
-                id="toro-ingreso"
-                type="date"
-                required
-                value={form.fecha_ingreso}
-                onChange={(event) => update('fecha_ingreso', event.target.value)}
-                className={fieldClass}
-              />
-            </Field>
           </div>
+          <Field id="edit-estado" label="Estado">
+            <select
+              id="edit-estado"
+              required
+              value={editForm.estado}
+              onChange={(event) =>
+                setEditForm((current) => ({
+                  ...current,
+                  estado: event.target.value as BovineStatus,
+                }))
+              }
+              className={fieldClass}
+            >
+              <option value="ACTIVO">Activo</option>
+              <option value="VENDIDO">Vendido</option>
+              <option value="BAJA">Baja</option>
+              <option value="MUERTO">Muerto</option>
+              {editForm.estado === 'INACTIVO' ? (
+                <option value="INACTIVO">Inactivo</option>
+              ) : null}
+            </select>
+          </Field>
+          {editError ? (
+            <p className="text-sm text-red-600" role="alert">
+              {editError}
+            </p>
+          ) : null}
           <button
             type="submit"
-            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover"
+            disabled={submitting}
+            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:opacity-70"
           >
-            Guardar toro
+            {submitting ? 'Guardando…' : 'Guardar cambios'}
           </button>
         </form>
       </Modal>
@@ -728,21 +1038,26 @@ export default function BullsPage() {
 
 function BullSanitaryDetail({
   bovine,
+  weighings,
   records,
   kindFilter,
   onKindFilter,
   onBack,
+  onEdit,
   onRegister,
   onRemove,
 }: {
   bovine: Bovine
+  weighings: Weighing[]
   records: SanitaryRecord[]
   kindFilter: SanitaryKind | 'TODOS'
   onKindFilter: (value: SanitaryKind | 'TODOS') => void
   onBack: () => void
+  onEdit: () => void
   onRegister: (tipo: SanitaryKind) => void
   onRemove: (id: string) => void
 }) {
+  const [fichaView, setFichaView] = useState<'sanidad' | 'peso'>('peso')
   const history = [...records]
     .filter((item) => kindFilter === 'TODOS' || item.tipo === kindFilter)
     .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id))
@@ -761,17 +1076,47 @@ function BullSanitaryDetail({
       <header className="mb-5 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-medium tracking-[0.18em] text-stone-400">
-            PLAN SANITARIO
+            FICHA
           </p>
           <h1 className="mt-1 font-serif text-3xl font-semibold text-stone-900">
             {bovineLabel(bovine)}
           </h1>
           <p className="mt-1 text-sm text-stone-500">
-            DIIO {bovine.numero_diio}
+            {bovine.numero_diio ? `DIIO ${bovine.numero_diio}` : 'Sin DIIO'}
             {bovine.raza ? ` · ${bovine.raza}` : ''}
+            {bovine.color ? ` · ${bovine.color}` : ''}
             {` · ${bovine.sexo === 'MACHO' ? 'Macho' : 'Hembra'}`}
+            {` · ${statusLabel[bovine.estado]}`}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-cream"
+        >
+          <Pencil className="size-4 text-bovi" />
+          Editar
+        </button>
+      </header>
+
+      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
+        <SegmentButton
+          active={fichaView === 'peso'}
+          onClick={() => setFichaView('peso')}
+          label="Pesajes"
+        />
+        <SegmentButton
+          active={fichaView === 'sanidad'}
+          onClick={() => setFichaView('sanidad')}
+          label="Sanidad"
+        />
+      </div>
+
+      {fichaView === 'peso' ? (
+        <WeightHistory weighings={weighings} />
+      ) : (
+        <>
+      <div className="mb-5 flex justify-end">
         <button
           type="button"
           onClick={() => onRegister(kindFilter === 'TODOS' ? 'VACUNACION' : kindFilter)}
@@ -780,7 +1125,7 @@ function BullSanitaryDetail({
           <Plus className="size-4" />
           Aplicar
         </button>
-      </header>
+      </div>
 
       <div className="mb-5 grid grid-cols-2 gap-2">
         {kinds.map((kind) => {
@@ -852,7 +1197,168 @@ function BullSanitaryDetail({
           </ol>
         )}
       </section>
+        </>
+      )}
     </div>
+  )
+}
+
+function WeightHistory({ weighings }: { weighings: Weighing[] }) {
+  const sorted = [...weighings].sort((a, b) =>
+    a.fecha_pesaje.localeCompare(b.fecha_pesaje),
+  )
+  const latest = sorted[sorted.length - 1]
+  const first = sorted[0]
+  const gain =
+    first && latest && sorted.length > 1 ? latest.peso_kg - first.peso_kg : null
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-xl font-semibold text-stone-900">
+              Curva de peso
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              {latest
+                ? `Último: ${latest.peso_kg.toFixed(1)} kg · ${formatIso(latest.fecha_pesaje)}`
+                : 'Todavía no hay pesajes de este toro.'}
+            </p>
+          </div>
+          {gain != null ? (
+            <p className={`text-sm font-semibold ${gain >= 0 ? 'text-bovi' : 'text-red-700'}`}>
+              {gain >= 0 ? '+' : ''}
+              {gain.toFixed(1)} kg
+            </p>
+          ) : null}
+        </div>
+        <WeightCurve points={sorted} />
+      </section>
+
+      <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 font-serif text-xl font-semibold text-stone-900">
+          Historial
+        </h2>
+        {sorted.length === 0 ? (
+          <p className="text-sm text-stone-500">
+            Registra pesajes en esta pantalla o con el pesaje rápido de Inicio.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {[...sorted].reverse().map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-cream px-3 py-3"
+              >
+                <span className="text-sm text-stone-600">
+                  {formatIso(item.fecha_pesaje)}
+                </span>
+                <span className="font-serif text-xl font-semibold text-stone-900">
+                  {item.peso_kg.toFixed(1)}
+                  <span className="ml-1 font-sans text-xs font-medium text-stone-400">
+                    kg
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function WeightCurve({ points }: { points: Weighing[] }) {
+  if (points.length === 0) {
+    return (
+      <div className="flex h-36 items-center justify-center rounded-2xl bg-cream text-sm text-stone-400">
+        Sin datos para graficar
+      </div>
+    )
+  }
+
+  if (points.length === 1) {
+    return (
+      <div className="flex h-36 flex-col items-center justify-center rounded-2xl bg-cream">
+        <p className="font-serif text-3xl font-semibold text-stone-900">
+          {points[0].peso_kg.toFixed(1)} kg
+        </p>
+        <p className="mt-1 text-xs text-stone-500">
+          Se necesita otro pesaje para ver la curva
+        </p>
+      </div>
+    )
+  }
+
+  const weights = points.map((item) => item.peso_kg)
+  const min = Math.min(...weights)
+  const max = Math.max(...weights)
+  const pad = Math.max(1, (max - min) * 0.2)
+  const yMin = min - pad
+  const yMax = max + pad
+  const width = 320
+  const height = 140
+  const left = 36
+  const right = 10
+  const top = 12
+  const bottom = 24
+  const innerW = width - left - right
+  const innerH = height - top - bottom
+  const coords = points.map((item, index) => {
+    const x = left + (index / (points.length - 1)) * innerW
+    const y = top + ((yMax - item.peso_kg) / (yMax - yMin)) * innerH
+    return { x, y, item }
+  })
+  const path = coords
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+    .join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full" role="img" aria-label="Curva de pesajes">
+      <line x1={left} y1={top} x2={left} y2={height - bottom} stroke="#e7e5e4" />
+      <line
+        x1={left}
+        y1={height - bottom}
+        x2={width - right}
+        y2={height - bottom}
+        stroke="#e7e5e4"
+      />
+      <text x={4} y={top + 8} className="fill-stone-400" fontSize="9">
+        {yMax.toFixed(0)}
+      </text>
+      <text x={4} y={height - bottom} className="fill-stone-400" fontSize="9">
+        {yMin.toFixed(0)}
+      </text>
+      <path d={path} fill="none" stroke="#1b5d3b" strokeWidth="2.5" strokeLinejoin="round" />
+      {coords.map((point) => (
+        <circle
+          key={point.item.id}
+          cx={point.x}
+          cy={point.y}
+          r="3.5"
+          fill="#1b5d3b"
+        />
+      ))}
+      <text
+        x={coords[0].x}
+        y={height - 6}
+        className="fill-stone-400"
+        fontSize="9"
+        textAnchor="start"
+      >
+        {formatIso(coords[0].item.fecha_pesaje)}
+      </text>
+      <text
+        x={coords[coords.length - 1].x}
+        y={height - 6}
+        className="fill-stone-400"
+        fontSize="9"
+        textAnchor="end"
+      >
+        {formatIso(coords[coords.length - 1].item.fecha_pesaje)}
+      </text>
+    </svg>
   )
 }
 
