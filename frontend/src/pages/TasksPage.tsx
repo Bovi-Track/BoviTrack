@@ -4,18 +4,18 @@ import { useAuth } from '../auth/AuthProvider.tsx'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
-import { roleLabel, todayIso } from '../lib/dashboard.ts'
+import { roleLabel, todayIso, loadTasks, createTask, updateTaskDone } from '../lib/dashboard.ts'
 import { loadFarmMembers } from '../lib/farm-manage.ts'
 import type { FarmMember } from '../types/dashboard.ts'
 
-type LocalTask = {
+type TaskItem = {
   id: string
   titulo: string
   descripcion: string
   estado: 'PENDIENTE' | 'COMPLETADA'
   fecha_limite: string
-  asignadaA: string | null
-  asignadaNombre: string
+  asignada_a: string | null
+  asignada_nombre: string
 }
 
 const emptyForm = {
@@ -29,7 +29,7 @@ export default function TasksPage() {
   const { user } = useAuth()
   const { activeFarm, role, loading } = useFarm()
   const [members, setMembers] = useState<FarmMember[]>([])
-  const [tasks, setTasks] = useState<LocalTask[]>([])
+  const [tasks, setTasks] = useState<TaskItem[]>([])
   const [scope, setScope] = useState<'mias' | 'equipo'>('mias')
   const [status, setStatus] = useState<'pendientes' | 'hechas' | 'todas'>('pendientes')
   const [query, setQuery] = useState('')
@@ -59,13 +59,26 @@ export default function TasksPage() {
     if (!activeFarm) return
     const farmId = activeFarm.id
     let active = true
-    loadFarmMembers(farmId)
-      .then((rows) => {
-        if (active) setMembers(rows)
-      })
-      .catch(() => {
-        if (active) setMembers([])
-      })
+    
+    async function loadData() {
+      try {
+        const [membersData, tasksData] = await Promise.all([
+          loadFarmMembers(farmId),
+          loadTasks(farmId)
+        ])
+        if (active) {
+          setMembers(membersData)
+          setTasks(tasksData as TaskItem[])
+        }
+      } catch {
+        if (active) {
+          setMembers([])
+          setTasks([])
+        }
+      }
+    }
+    
+    void loadData()
     return () => {
       active = false
     }
@@ -90,13 +103,13 @@ export default function TasksPage() {
     return tasks
       .filter((task) => {
         if (scope === 'mias') {
-          const mine = !task.asignadaA || task.asignadaA === user?.id
+          const mine = !task.asignada_a || task.asignada_a === user?.id
           if (!mine) return false
         }
         if (status === 'pendientes' && task.estado !== 'PENDIENTE') return false
         if (status === 'hechas' && task.estado !== 'COMPLETADA') return false
         if (!term) return true
-        return [task.titulo, task.descripcion, task.asignadaNombre]
+        return [task.titulo, task.descripcion, task.asignada_nombre]
           .join(' ')
           .toLowerCase()
           .includes(term)
@@ -106,52 +119,64 @@ export default function TasksPage() {
 
   const mineCount = tasks.filter(
     (task) =>
-      task.estado === 'PENDIENTE' && (!task.asignadaA || task.asignadaA === user?.id),
+      task.estado === 'PENDIENTE' && (!task.asignada_a || task.asignada_a === user?.id),
   ).length
 
   function update(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!activeFarm) return
     const assignee = people.find((item) => item.userId === form.asignadaA)
-    const task: LocalTask = {
-      id: crypto.randomUUID(),
-      titulo: form.titulo.trim(),
-      descripcion: form.descripcion.trim(),
-      estado: 'PENDIENTE',
-      fecha_limite: form.fecha_limite,
-      asignadaA: assignee?.userId ?? null,
-      asignadaNombre: assignee ? memberLabel(assignee) : 'Toda la finca',
+    try {
+      await createTask(
+        activeFarm.id,
+        form.titulo.trim(),
+        form.descripcion.trim() || null,
+        form.fecha_limite,
+        assignee?.userId ?? null
+      )
+      
+      const updatedTasks = await loadTasks(activeFarm.id)
+      setTasks(updatedTasks as TaskItem[])
+      
+      setOpen(false)
+      setForm({ ...emptyForm, fecha_limite: todayIso() })
+      if (assignee && assignee.userId !== user?.id) {
+        setScope('equipo')
+      } else {
+        setScope('mias')
+      }
+      setStatus('pendientes')
+      setToast(
+        assignee && assignee.userId !== user?.id
+          ? `Tarea asignada a ${memberLabel(assignee)}.`
+          : 'Tarea guardada en tu lista.',
+      )
+    } catch (err) {
+      setToast('No se pudo guardar la tarea. Intenta de nuevo.')
     }
-    setTasks((current) => [task, ...current])
-    setOpen(false)
-    setForm({ ...emptyForm, fecha_limite: todayIso() })
-    if (assignee && assignee.userId !== user?.id) {
-      setScope('equipo')
-    } else {
-      setScope('mias')
-    }
-    setStatus('pendientes')
-    setToast(
-      assignee && assignee.userId !== user?.id
-        ? `Vista previa. Quedó asignada a ${memberLabel(assignee)} y aún no se guarda.`
-        : 'Vista previa. La tarea quedó en esta sesión y aún no se guarda.',
-    )
   }
 
-  function toggle(task: LocalTask) {
-    setTasks((current) =>
-      current.map((item) =>
-        item.id === task.id
-          ? {
-              ...item,
-              estado: item.estado === 'COMPLETADA' ? 'PENDIENTE' : 'COMPLETADA',
-            }
-          : item,
-      ),
-    )
+  async function toggle(task: TaskItem) {
+    const nextStatus = task.estado === 'COMPLETADA' ? false : true
+    try {
+      await updateTaskDone(task.id, nextStatus)
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === task.id
+            ? {
+                ...item,
+                estado: nextStatus ? 'COMPLETADA' : 'PENDIENTE',
+              }
+            : item,
+        ),
+      )
+    } catch (err) {
+      setToast('No se pudo actualizar la tarea.')
+    }
   }
 
   if (loading) {
@@ -172,7 +197,7 @@ export default function TasksPage() {
           </h1>
           <p className="mt-1 text-sm text-stone-500">
             {activeFarm
-              ? `Asigna trabajo en ${activeFarm.nombre} y revisa lo que te toca. Aún no se guarda.`
+              ? `Asigna trabajo en ${activeFarm.nombre} y revisa lo que te toca.`
               : 'Selecciona una finca desde Inicio para ver las tareas.'}
           </p>
         </div>
@@ -292,7 +317,7 @@ export default function TasksPage() {
                       </span>
                     ) : null}
                     <span className="mt-2 block text-xs text-stone-500">
-                      {task.asignadaNombre}
+                      {task.asignada_nombre}
                       {done || overdue ? ` · ${formatIso(task.fecha_limite)}` : ''}
                     </span>
                   </span>
@@ -307,7 +332,7 @@ export default function TasksPage() {
         open={open}
         onClose={() => setOpen(false)}
         title="Asignar tarea"
-        description="La persona elegida la verá en Mis tareas. Aún no se guarda en la finca."
+        description="La persona elegida la verá en Mis tareas."
       >
         <form onSubmit={onSubmit} className="space-y-4">
           <Field id="tarea-titulo" label="Tarea">

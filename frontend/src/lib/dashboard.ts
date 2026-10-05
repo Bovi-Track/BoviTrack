@@ -192,23 +192,38 @@ export async function saveWeighing(
   } as Weighing
 }
 
-export async function loadTasks(farmId: string, userId: string) {
-  const { data, error } = await supabase
-    .from('tarea_campo')
-    .select('id, titulo, descripcion, estado, fecha_limite')
-    .eq('finca_id', farmId)
-    .or(`asignada_a.eq.${userId},asignada_a.is.null`)
-    .order('fecha_limite', { ascending: true })
+export async function loadTasks(farmId: string) {
+  const { data, error } = await supabase.rpc('obtener_tareas_finca', {
+    p_finca_id: farmId,
+  })
 
   if (error) throw error
-  return (data ?? []) as Task[]
+  return (data ?? []) as any[]
+}
+
+export async function createTask(
+  farmId: string,
+  titulo: string,
+  descripcion: string | null,
+  fecha_limite: string | null,
+  asignadaA: string | null,
+) {
+  const { data, error } = await supabase.rpc('crear_tarea_finca', {
+    p_finca_id: farmId,
+    p_titulo: titulo,
+    p_descripcion: descripcion,
+    p_fecha_limite: fecha_limite,
+    p_asignada_a: asignadaA,
+  })
+  if (error) throw error
+  return data
 }
 
 export async function updateTaskDone(id: string, done: boolean) {
-  const { error } = await supabase
-    .from('tarea_campo')
-    .update({ estado: done ? 'COMPLETADA' : 'PENDIENTE' })
-    .eq('id', id)
+  const { error } = await supabase.rpc('marcar_tarea_estado', {
+    p_id: id,
+    p_estado: done ? 'COMPLETADA' : 'PENDIENTE',
+  })
   if (error) throw error
 }
 
@@ -236,6 +251,43 @@ export async function loadTreatments(bovineIds: string[]) {
       bovino: bovine ?? undefined,
     }
   }) as Treatment[]
+}
+
+export async function loadSanitaryRecords(farmId: string) {
+  const { data, error } = await supabase.rpc('obtener_registros_sanitarios_finca', {
+    p_finca_id: farmId,
+  })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createSanitaryRecord(
+  bovinoId: string,
+  tipo: string,
+  producto: string,
+  dosis: string,
+  fecha: string,
+  proxima: string | null,
+  responsable: string | null,
+  observaciones: string | null,
+) {
+  const { data, error } = await supabase.rpc('registrar_aplicacion_sanitaria', {
+    p_bovino_id: bovinoId,
+    p_tipo: tipo,
+    p_producto: producto,
+    p_dosis: dosis,
+    p_fecha_aplicacion: fecha,
+    p_proxima_aplicacion: proxima,
+    p_responsable: responsable,
+    p_observaciones: observaciones,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function removeSanitaryRecord(id: string) {
+  const { error } = await supabase.rpc('eliminar_registro_sanitario', { p_id: id })
+  if (error) throw error
 }
 
 export function computeMetrics(

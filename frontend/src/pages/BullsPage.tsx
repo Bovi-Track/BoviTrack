@@ -24,6 +24,9 @@ import {
   loadWeighings,
   todayIso,
   updateBovine,
+  loadSanitaryRecords,
+  createSanitaryRecord,
+  removeSanitaryRecord
 } from '../lib/dashboard.ts'
 import type { Bovine, BovineStatus, Weighing } from '../types/dashboard.ts'
 
@@ -275,9 +278,11 @@ export default function BullsPage() {
       try {
         const rows = await loadBovines(farmId)
         const nextWeighings = await loadWeighings(rows.map((item) => item.id))
+        const nextRecords = await loadSanitaryRecords(farmId)
         if (!active) return
         setBovines(rows)
         setWeighings(nextWeighings)
+        setRecords(nextRecords)
       } catch {
         if (active) {
           setToast({ message: 'No se pudieron cargar los toros.', tone: 'error' })
@@ -426,33 +431,51 @@ export default function BullsPage() {
     setPlanOpen(true)
   }
 
-  function onSubmitPlan(event: FormEvent<HTMLFormElement>) {
+  async function onSubmitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!planForm.bovino_id) return
-    const record: SanitaryRecord = {
-      id: crypto.randomUUID(),
-      bovino_id: planForm.bovino_id,
-      tipo: planForm.tipo,
-      producto: planForm.producto.trim(),
-      dosis: planForm.dosis.trim(),
-      fecha: planForm.fecha,
-      proxima: planForm.proxima,
-      responsable: planForm.responsable.trim(),
-      observaciones: planForm.observaciones.trim(),
+    
+    try {
+      await createSanitaryRecord(
+        planForm.bovino_id,
+        planForm.tipo,
+        planForm.producto.trim(),
+        planForm.dosis.trim(),
+        planForm.fecha,
+        planForm.proxima || null,
+        planForm.responsable.trim() || null,
+        planForm.observaciones.trim() || null
+      )
+      
+      if (activeFarm) {
+        const nextRecords = await loadSanitaryRecords(activeFarm.id)
+        setRecords(nextRecords)
+      }
+      
+      setSelectedId(planForm.bovino_id)
+      setKindFilter('TODOS')
+      setPlanOpen(false)
+      setPlanForm(emptyPlan())
+      setToast({
+        message: 'Registro sanitario guardado.',
+        tone: 'ok',
+      })
+    } catch (err) {
+      setToast({
+        message: 'No se pudo guardar el registro sanitario.',
+        tone: 'error',
+      })
     }
-    setRecords((current) => [record, ...current])
-    setSelectedId(record.bovino_id)
-    setKindFilter('TODOS')
-    setPlanOpen(false)
-    setPlanForm(emptyPlan())
-    setToast({
-      message: 'Vista previa. La aplicación quedó en esta sesión y aún no se guarda.',
-      tone: 'warn',
-    })
   }
 
-  function removeRecord(id: string) {
-    setRecords((current) => current.filter((item) => item.id !== id))
+  async function removeRecord(id: string) {
+    try {
+      await removeSanitaryRecord(id)
+      setRecords((current) => current.filter((item) => item.id !== id))
+      setToast({ message: 'Registro eliminado.', tone: 'ok' })
+    } catch (err) {
+      setToast({ message: 'No se pudo eliminar el registro.', tone: 'error' })
+    }
   }
 
   if (loading) {
