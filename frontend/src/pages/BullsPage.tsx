@@ -111,43 +111,43 @@ const kinds: {
   bar: string
   placeholder: string
 }[] = [
-  {
-    id: 'VACUNACION',
-    label: 'Vacunación',
-    short: 'Vacuna',
-    icon: Syringe,
-    chip: 'bg-emerald-100 text-emerald-800',
-    bar: 'bg-emerald-600',
-    placeholder: 'Clostridial, aftosa, rabia…',
-  },
-  {
-    id: 'DESPARASITACION',
-    label: 'Desparasitación',
-    short: 'Desparasitar',
-    icon: Bug,
-    chip: 'bg-amber-100 text-amber-900',
-    bar: 'bg-amber-500',
-    placeholder: 'Ivermectina, albendazol…',
-  },
-  {
-    id: 'VITAMINIZACION',
-    label: 'Vitaminización',
-    short: 'Vitaminas',
-    icon: Pill,
-    chip: 'bg-sky-100 text-sky-900',
-    bar: 'bg-sky-600',
-    placeholder: 'Complejo B, ADE…',
-  },
-  {
-    id: 'TRATAMIENTO',
-    label: 'Tratamiento médico',
-    short: 'Tratamiento',
-    icon: Stethoscope,
-    chip: 'bg-rose-100 text-rose-800',
-    bar: 'bg-rose-600',
-    placeholder: 'Antibiótico, antiinflamatorio…',
-  },
-]
+    {
+      id: 'VACUNACION',
+      label: 'Vacunación',
+      short: 'Vacuna',
+      icon: Syringe,
+      chip: 'bg-emerald-100 text-emerald-800',
+      bar: 'bg-emerald-600',
+      placeholder: 'Clostridial, aftosa, rabia…',
+    },
+    {
+      id: 'DESPARASITACION',
+      label: 'Desparasitación',
+      short: 'Desparasitar',
+      icon: Bug,
+      chip: 'bg-amber-100 text-amber-900',
+      bar: 'bg-amber-500',
+      placeholder: 'Ivermectina, albendazol…',
+    },
+    {
+      id: 'VITAMINIZACION',
+      label: 'Vitaminización',
+      short: 'Vitaminas',
+      icon: Pill,
+      chip: 'bg-sky-100 text-sky-900',
+      bar: 'bg-sky-600',
+      placeholder: 'Complejo B, ADE…',
+    },
+    {
+      id: 'TRATAMIENTO',
+      label: 'Tratamiento médico',
+      short: 'Tratamiento',
+      icon: Stethoscope,
+      chip: 'bg-rose-100 text-rose-800',
+      bar: 'bg-rose-600',
+      placeholder: 'Antibiótico, antiinflamatorio…',
+    },
+  ]
 
 const kindById = Object.fromEntries(kinds.map((item) => [item.id, item])) as Record<
   SanitaryKind,
@@ -206,7 +206,7 @@ function addDays(iso: string, days: number) {
 function latestOf(records: SanitaryRecord[], tipo: SanitaryKind) {
   return records
     .filter((item) => item.tipo === tipo)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id))[0]
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))[0]
 }
 
 function planStatus(record: SanitaryRecord | undefined): PlanStatus {
@@ -434,7 +434,15 @@ export default function BullsPage() {
   async function onSubmitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!planForm.bovino_id) return
-    
+
+    if (!Number.isFinite(Number(planForm.dosis)) || Number(planForm.dosis) <= 0) {
+      setToast({
+        message: 'La dosis debe ser un número mayor que 0 (ej: 5 ml).',
+        tone: 'error',
+      })
+      return
+    }
+
     try {
       await createSanitaryRecord(
         planForm.bovino_id,
@@ -443,15 +451,15 @@ export default function BullsPage() {
         planForm.dosis.trim(),
         planForm.fecha,
         planForm.proxima || null,
-        planForm.responsable.trim() || null,
+        null,
         planForm.observaciones.trim() || null
       )
-      
+
       if (activeFarm) {
         const nextRecords = await loadSanitaryRecords(activeFarm.id)
         setRecords(nextRecords)
       }
-      
+
       setSelectedId(planForm.bovino_id)
       setKindFilter('TODOS')
       setPlanOpen(false)
@@ -624,11 +632,10 @@ export default function BullsPage() {
                             </p>
                           </div>
                           <span
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                              item.estado === 'ACTIVO'
-                                ? 'bg-bovi/10 text-bovi'
-                                : 'bg-stone-100 text-stone-600'
-                            }`}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.estado === 'ACTIVO'
+                              ? 'bg-bovi/10 text-bovi'
+                              : 'bg-stone-100 text-stone-600'
+                              }`}
                           >
                             {statusLabel[item.estado]}
                           </span>
@@ -969,11 +976,10 @@ export default function BullsPage() {
                     type="button"
                     aria-pressed={active}
                     onClick={() => updatePlan('tipo', kind.id)}
-                    className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border px-3 text-left text-sm font-medium ${
-                      active
-                        ? 'border-bovi bg-bovi/10 text-bovi'
-                        : 'border-stone-200 bg-white text-stone-700'
-                    }`}
+                    className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border px-3 text-left text-sm font-medium ${active
+                      ? 'border-bovi bg-bovi/10 text-bovi'
+                      : 'border-stone-200 bg-white text-stone-700'
+                      }`}
                   >
                     <Icon className="size-4 shrink-0" />
                     {kind.short}
@@ -1025,16 +1031,6 @@ export default function BullsPage() {
                 className={fieldClass}
               />
             </Field>
-            <Field id="plan-responsable" label="Responsable">
-              <input
-                id="plan-responsable"
-                maxLength={80}
-                value={planForm.responsable}
-                onChange={(event) => updatePlan('responsable', event.target.value)}
-                className={fieldClass}
-                placeholder="Nombre de quien aplicó"
-              />
-            </Field>
           </div>
           <Field id="plan-obs" label="Observaciones (opcional)">
             <textarea
@@ -1083,7 +1079,7 @@ function BullSanitaryDetail({
   const [fichaView, setFichaView] = useState<'sanidad' | 'peso'>('peso')
   const history = [...records]
     .filter((item) => kindFilter === 'TODOS' || item.tipo === kindFilter)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
 
   return (
     <div>
@@ -1139,87 +1135,86 @@ function BullSanitaryDetail({
         <WeightHistory weighings={weighings} />
       ) : (
         <>
-      <div className="mb-5 flex justify-end">
-        <button
-          type="button"
-          onClick={() => onRegister(kindFilter === 'TODOS' ? 'VACUNACION' : kindFilter)}
-          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover"
-        >
-          <Plus className="size-4" />
-          Aplicar
-        </button>
-      </div>
-
-      <div className="mb-5 grid grid-cols-2 gap-2">
-        {kinds.map((kind) => {
-          const latest = latestOf(records, kind.id)
-          const status = planStatus(latest)
-          const Icon = kind.icon
-          const selectedKind = kindFilter === kind.id
-          return (
+          <div className="mb-5 flex justify-end">
             <button
-              key={kind.id}
               type="button"
-              onClick={() => onKindFilter(selectedKind ? 'TODOS' : kind.id)}
-              className={`cursor-pointer rounded-2xl border bg-white p-3 text-left shadow-sm ${
-                selectedKind ? 'border-bovi' : 'border-stone-200/80'
-              }`}
+              onClick={() => onRegister(kindFilter === 'TODOS' ? 'VACUNACION' : kindFilter)}
+              className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className={`inline-flex rounded-full p-1.5 ${kind.chip}`}>
-                  <Icon className="size-3.5" />
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${planStatusClass[status]}`}
+              <Plus className="size-4" />
+              Aplicar
+            </button>
+          </div>
+
+          <div className="mb-5 grid grid-cols-2 gap-2">
+            {kinds.map((kind) => {
+              const latest = latestOf(records, kind.id)
+              const status = planStatus(latest)
+              const Icon = kind.icon
+              const selectedKind = kindFilter === kind.id
+              return (
+                <button
+                  key={kind.id}
+                  type="button"
+                  onClick={() => onKindFilter(selectedKind ? 'TODOS' : kind.id)}
+                  className={`cursor-pointer rounded-2xl border bg-white p-3 text-left shadow-sm ${selectedKind ? 'border-bovi' : 'border-stone-200/80'
+                    }`}
                 >
-                  {planStatusLabel[status]}
-                </span>
-              </div>
-              <p className="mt-2 text-sm font-medium text-stone-900">{kind.short}</p>
-              <p className="mt-0.5 text-xs text-stone-500">
-                {latest
-                  ? `${latest.producto} · ${formatIso(latest.fecha)}`
-                  : 'Sin aplicaciones'}
-              </p>
-              {latest?.proxima ? (
-                <p className="mt-1 text-xs font-medium text-stone-700">
-                  Próxima {formatIso(latest.proxima)}
-                </p>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`inline-flex rounded-full p-1.5 ${kind.chip}`}>
+                      <Icon className="size-3.5" />
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${planStatusClass[status]}`}
+                    >
+                      {planStatusLabel[status]}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-stone-900">{kind.short}</p>
+                  <p className="mt-0.5 text-xs text-stone-500">
+                    {latest
+                      ? `${latest.producto} · ${formatIso(latest.fecha)}`
+                      : 'Sin aplicaciones'}
+                  </p>
+                  {latest?.proxima ? (
+                    <p className="mt-1 text-xs font-medium text-stone-700">
+                      Próxima {formatIso(latest.proxima)}
+                    </p>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
 
-      <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-serif text-xl font-semibold text-stone-900">
-            Historial
-          </h2>
-          {kindFilter !== 'TODOS' ? (
-            <button
-              type="button"
-              onClick={() => onKindFilter('TODOS')}
-              className="cursor-pointer text-xs font-medium text-bovi"
-            >
-              Ver todos
-            </button>
-          ) : null}
-        </div>
-        {history.length === 0 ? (
-          <p className="text-sm text-stone-500">
-            {kindFilter === 'TODOS'
-              ? 'Todavía no hay aplicaciones. Usa Aplicar para registrar la primera.'
-              : `No hay ${kindById[kindFilter].label.toLowerCase()} en esta sesión.`}
-          </p>
-        ) : (
-          <ol className="space-y-4">
-            {history.map((item) => (
-              <HistoryItem key={item.id} item={item} onRemove={onRemove} />
-            ))}
-          </ol>
-        )}
-      </section>
+          <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-serif text-xl font-semibold text-stone-900">
+                Historial
+              </h2>
+              {kindFilter !== 'TODOS' ? (
+                <button
+                  type="button"
+                  onClick={() => onKindFilter('TODOS')}
+                  className="cursor-pointer text-xs font-medium text-bovi"
+                >
+                  Ver todos
+                </button>
+              ) : null}
+            </div>
+            {history.length === 0 ? (
+              <p className="text-sm text-stone-500">
+                {kindFilter === 'TODOS'
+                  ? 'Todavía no hay aplicaciones. Usa Aplicar para registrar la primera.'
+                  : `No hay ${kindById[kindFilter].label.toLowerCase()} en esta sesión.`}
+              </p>
+            ) : (
+              <ol className="space-y-4">
+                {history.map((item) => (
+                  <HistoryItem key={item.id} item={item} onRemove={onRemove} />
+                ))}
+              </ol>
+            )}
+          </section>
         </>
       )}
     </div>
@@ -1454,9 +1449,8 @@ function SanitaryCalendar({
                       </span>
                     </span>
                     <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        overdue ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-900'
-                      }`}
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${overdue ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-900'
+                        }`}
                     >
                       {overdue ? 'Vencida' : formatIso(item.proxima)}
                     </span>
@@ -1563,9 +1557,8 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${
-        active ? 'bg-bovi text-white' : 'bg-white text-stone-600'
-      }`}
+      className={`shrink-0 cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${active ? 'bg-bovi text-white' : 'bg-white text-stone-600'
+        }`}
     >
       {label}
     </button>
@@ -1585,9 +1578,8 @@ function SegmentButton({
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-11 cursor-pointer rounded-xl text-sm font-medium ${
-        active ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
-      }`}
+      className={`min-h-11 cursor-pointer rounded-xl text-sm font-medium ${active ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
+        }`}
     >
       {label}
     </button>
