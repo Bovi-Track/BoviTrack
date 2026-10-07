@@ -43,6 +43,7 @@ export type CreateBovineInput = {
 }
 
 export type UpdateBovineInput = {
+  identificador_interno: string
   nombre: string | null
   raza: string | null
   color: string | null

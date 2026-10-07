@@ -45,6 +45,7 @@ type BullDraft = {
 type DraftField = Exclude<keyof BullDraft, 'localId'>
 
 type EditForm = {
+  identificador_interno: string
   nombre: string
   raza: string
   color: string
@@ -67,6 +68,7 @@ function newDraft(): BullDraft {
 
 function editFrom(bovine: Bovine): EditForm {
   return {
+    identificador_interno: bovine.identificador_interno,
     nombre: bovine.nombre ?? '',
     raza: bovine.raza ?? '',
     color: bovine.color ?? '',
@@ -236,6 +238,7 @@ export default function BullsPage() {
   const [addError, setAddError] = useState('')
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>({
+    identificador_interno: '',
     nombre: '',
     raza: '',
     color: '',
@@ -405,10 +408,16 @@ export default function BullsPage() {
   async function onSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selected) return
+    const identificador = editForm.identificador_interno.trim()
+    if (!identificador) {
+      setEditError('El identificador interno es obligatorio.')
+      return
+    }
     setEditError('')
     setSubmitting(true)
     try {
       const updated = await updateBovine(selected.id, {
+        identificador_interno: identificador,
         nombre: editForm.nombre.trim() || null,
         raza: editForm.raza.trim() || null,
         color: editForm.color.trim() || null,
@@ -861,6 +870,22 @@ export default function BullsPage() {
         }
       >
         <form onSubmit={onSubmitEdit} className="space-y-4">
+          <Field id="edit-interno" label="Identificador interno">
+            <input
+              id="edit-interno"
+              required
+              maxLength={50}
+              value={editForm.identificador_interno}
+              onChange={(event) =>
+                setEditForm((current) => ({
+                  ...current,
+                  identificador_interno: event.target.value,
+                }))
+              }
+              className={fieldClass}
+              placeholder="T-014"
+            />
+          </Field>
           <Field id="edit-nombre" label="Nombre">
             <input
               id="edit-nombre"
