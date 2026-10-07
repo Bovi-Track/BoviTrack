@@ -7,7 +7,6 @@ import type {
   FarmRole,
   PendingWeighing,
   SaleHint,
-  Task,
   Treatment,
   UpdateBovineInput,
   Weighing,
