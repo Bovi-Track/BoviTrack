@@ -99,7 +99,6 @@ export default function HomePage() {
     }
 
     const farmId = activeFarm.id
-    const userId = user.id
     let active = true
     async function load() {
       try {
@@ -107,7 +106,7 @@ export default function HomePage() {
         const ids = nextBovines.map((item) => item.id)
         const [weighings, nextTasks, nextTreatments] = await Promise.all([
           loadWeighings(ids),
-          loadTasks(farmId, userId),
+          loadTasks(farmId),
           loadTreatments(ids),
         ])
         if (!active) return
@@ -234,11 +233,10 @@ export default function HomePage() {
             </p>
           </div>
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
-              online
-                ? 'bg-bovi/10 text-bovi'
-                : 'bg-amber-100 text-amber-800'
-            }`}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${online
+              ? 'bg-bovi/10 text-bovi'
+              : 'bg-amber-100 text-amber-800'
+              }`}
           >
             {online ? (
               <Wifi className="size-3.5" />
@@ -282,11 +280,10 @@ export default function HomePage() {
                       setActiveFarmId(farm.id)
                       setFarmOpen(false)
                     }}
-                    className={`w-full cursor-pointer px-4 py-3 text-left text-sm ${
-                      farm.id === activeFarm?.id
-                        ? 'bg-bovi/10 font-medium text-bovi'
-                        : 'text-stone-700 hover:bg-cream'
-                    }`}
+                    className={`w-full cursor-pointer px-4 py-3 text-left text-sm ${farm.id === activeFarm?.id
+                      ? 'bg-bovi/10 font-medium text-bovi'
+                      : 'text-stone-700 hover:bg-cream'
+                      }`}
                   >
                     <span className="block">{farm.nombre}</span>
                     {farm.ubicacion ? (
