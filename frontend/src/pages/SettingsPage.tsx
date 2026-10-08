@@ -34,13 +34,7 @@ export default function SettingsPage() {
           {roleLabel(role)}
           {activeFarm ? ` · ${activeFarm.nombre}` : ''}
         </p>
-        <Link
-          to="/reporte"
-          className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-stone-200 text-sm font-medium text-stone-800 transition hover:bg-cream"
-        >
-          <FileText className="size-4 text-bovi" />
-          Reporte semanal / PDF
-        </Link>
+
         <button
           type="button"
           onClick={onLogout}
