@@ -88,5 +88,6 @@ export type SaleHint = {
 export type DashboardMetrics = {
   activeBulls: number
   averageGmd: number | null
+  weeklyGmd: number | null
   pendingAlerts: number
 }

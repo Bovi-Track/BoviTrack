@@ -1,7 +1,16 @@
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { bovineLabel, computeMetrics, saleHints } from './dashboard.ts'
+import {
+  EXPECTED_GMD_KG,
+  buildWeeklyReport,
+  formatPct,
+  formatSigned,
+} from './gmd.ts'
 import type { Bovine, SaleHint, Treatment, Weighing } from '../types/dashboard.ts'
 
 export type ReportSectionId =
+  | 'semanal'
   | 'resumen'
   | 'toros'
   | 'pesajes'
@@ -16,6 +25,11 @@ export type ReportSection = {
 }
 
 export const REPORT_SECTIONS: ReportSection[] = [
+  {
+    id: 'semanal',
+    label: 'Reporte semanal',
+    description: 'Peso, GMD semanal de los sábados y estructura del hato.',
+  },
   {
     id: 'resumen',
     label: 'Resumen de la finca',
@@ -61,6 +75,7 @@ export type ReportSelection = Record<ReportSectionId, boolean>
 
 export function defaultReportSelection(): ReportSelection {
   return {
+    semanal: true,
     resumen: true,
     toros: true,
     pesajes: true,
@@ -72,14 +87,6 @@ export function defaultReportSelection(): ReportSelection {
 
 export function selectedSectionCount(selection: ReportSelection) {
   return REPORT_SECTIONS.filter((section) => selection[section.id]).length
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
 }
 
 function formatDate(value: string) {
@@ -113,244 +120,314 @@ function saleLabel(status: SaleHint['status']) {
   return 'Mantener'
 }
 
-function emptyRow(message: string, columns: number) {
-  return `<tr><td colspan="${columns}" class="empty">${escapeHtml(message)}</td></tr>`
+function kgText(value: number | null, digits: number) {
+  return value == null ? '—' : `${value.toFixed(digits)} kg`
 }
 
-function table(headers: string[], rows: string) {
-  return `
-    <table>
-      <thead>
-        <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `
+function changeText(value: number | null) {
+  const change = formatPct(value)
+  return change ? ` ${change.text}` : ''
 }
 
-export function buildReportHtml(data: ReportData, selection: ReportSelection) {
+function lastTableY(doc: jsPDF) {
+  const extra = doc as jsPDF & { lastAutoTable?: { finalY: number } }
+  return extra.lastAutoTable?.finalY ?? 20
+}
+
+function ensureSpace(doc: jsPDF, y: number, needed: number) {
+  const bottom = doc.internal.pageSize.getHeight() - 18
+  if (y + needed <= bottom) return y
+  doc.addPage()
+  return 18
+}
+
+function addHeading(doc: jsPDF, y: number, title: string) {
+  const next = ensureSpace(doc, y, 16)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(14)
+  doc.setTextColor(28, 25, 23)
+  doc.text(title, 14, next)
+  return next + 6
+}
+
+function addNote(doc: jsPDF, y: number, text: string) {
+  const next = ensureSpace(doc, y, 8)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(120, 113, 108)
+  const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - 28)
+  doc.text(lines, 14, next)
+  return next + lines.length * 4 + 2
+}
+
+function addTable(
+  doc: jsPDF,
+  y: number,
+  head: string[],
+  body: string[][],
+) {
+  autoTable(doc, {
+    startY: y,
+    head: [head],
+    body: body.length > 0 ? body : [['Sin datos']],
+    styles: { fontSize: 9, cellPadding: 2.2, textColor: [68, 64, 60] },
+    headStyles: {
+      fillColor: [27, 93, 59],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 8,
+    },
+    alternateRowStyles: { fillColor: [250, 247, 242] },
+    margin: { left: 14, right: 14 },
+  })
+  return lastTableY(doc) + 8
+}
+
+export function suggestedReportFilename(farmName: string, generatedAt: string) {
+  const date = generatedAt.slice(0, 10)
+  const safe = farmName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w]+/g, '-')
+    .replace(/^-|-$/g, '')
+  return `BoviTrack-${safe || 'finca'}-${date}.pdf`
+}
+
+export function buildReportPdf(data: ReportData, selection: ReportSelection) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const metrics = computeMetrics(data.bovines, data.weighings, data.treatments)
+  const weekly = buildWeeklyReport(data.bovines, data.weighings)
   const hints = saleHints(data.bovines, data.weighings)
   const byBovine = new Map(data.bovines.map((item) => [item.id, item]))
+  const pageWidth = doc.internal.pageSize.getWidth()
 
-  const sections: string[] = []
+  let y = 16
+  doc.setTextColor(27, 93, 59)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.text('BOVITRACK · GANADERÍA Y CAMPO', 14, y)
+  y += 8
+  doc.setTextColor(28, 25, 23)
+  doc.setFontSize(18)
+  doc.text(`Reporte de ${data.farmName}`, 14, y)
+  y += 7
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(120, 113, 108)
+  const meta = [
+    data.farmLocation,
+    `Generado el ${formatDateTime(data.generatedAt)}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  doc.text(meta, 14, y)
+  y += 4
+  doc.setDrawColor(27, 93, 59)
+  doc.setLineWidth(0.6)
+  doc.line(14, y, pageWidth - 14, y)
+  y += 10
+
+  if (selection.semanal) {
+    y = addHeading(doc, y, 'Reporte semanal')
+    y = addNote(
+      doc,
+      y,
+      `Semana del ${formatDate(weekly.thisSaturday)} · GMD esperada ${EXPECTED_GMD_KG.toFixed(2)} kg/día`,
+    )
+    y = addTable(
+      doc,
+      y,
+      ['Indicador', 'Valor'],
+      [
+        ['Peso total', `${kgText(weekly.totalWeight, 0)}${changeText(weekly.totalWeightChangePct)}`],
+        ['Peso promedio', `${kgText(weekly.averageWeight, 0)}${changeText(weekly.averageWeightChangePct)}`],
+        ['Gan. diaria total', `${kgText(weekly.totalDailyGain, 2)}${changeText(weekly.dailyGainChangePct)}`],
+        ['Gan. diaria prom.', `${kgText(weekly.averageDailyGain, 3)}${changeText(weekly.dailyGainChangePct)}`],
+        ['Total de animales', String(weekly.herdTotal)],
+        ['Sobre ganancia esperada', String(weekly.overExpectedGain)],
+        ['Sobre peso promedio', String(weekly.overAverageWeight)],
+        ['Por debajo del promedio', String(weekly.belowAverageWeight)],
+        ['Con baja ganancia', String(weekly.lowGain)],
+      ],
+    )
+    y = addNote(
+      doc,
+      y,
+      `Pesaje de la semana (${formatDate(weekly.thisSaturday)}): último peso, diferencia vs la semana pasada y GMD semanal.`,
+    )
+    y = addTable(
+      doc,
+      y,
+      ['Animal', 'Último peso', 'Dif. semanal', 'GMD semanal'],
+      [
+        ...(weekly.bulls.length === 0
+          ? [['No hay bovinos activos.', '', '', '']]
+          : weekly.bulls.map((item) => [
+              bovineLabel(item.bovine),
+              item.lastWeight == null ? '—' : item.lastWeight.toFixed(0),
+              formatSigned(item.weekDelta, 0),
+              item.weeklyGmd == null ? '—' : item.weeklyGmd.toFixed(2),
+            ])),
+        [
+          'Totales',
+          weekly.totalWeight == null ? '—' : weekly.totalWeight.toFixed(0),
+          formatSigned(weekly.totalWeightGained, 0),
+          weekly.averageDailyGain == null
+            ? '—'
+            : weekly.averageDailyGain.toFixed(2),
+        ],
+      ],
+    )
+    y = addTable(
+      doc,
+      y,
+      ['Resumen semanal', 'Valor'],
+      [
+        ['Peso total', weekly.totalWeight == null ? '—' : weekly.totalWeight.toFixed(0)],
+        [
+          'Peso prom. x animal',
+          weekly.averageWeight == null ? '—' : weekly.averageWeight.toFixed(0),
+        ],
+        ['Total peso ganado', formatSigned(weekly.totalWeightGained, 0)],
+        [
+          'Total ganancia diaria',
+          weekly.totalDailyGain == null ? '—' : weekly.totalDailyGain.toFixed(2),
+        ],
+        [
+          'Ganancia diaria x animal',
+          weekly.averageDailyGain == null
+            ? '—'
+            : weekly.averageDailyGain.toFixed(2),
+        ],
+      ],
+    )
+  }
 
   if (selection.resumen) {
-    sections.push(`
-      <section>
-        <h2>Resumen de la finca</h2>
-        <div class="metrics">
-          <article>
-            <strong>${metrics.activeBulls}</strong>
-            <span>Toros activos</span>
-          </article>
-          <article>
-            <strong>${metrics.averageGmd == null ? '—' : `${metrics.averageGmd.toFixed(2)} kg`}</strong>
-            <span>GMD global</span>
-          </article>
-          <article>
-            <strong>${metrics.pendingAlerts}</strong>
-            <span>Alertas pendientes</span>
-          </article>
-        </div>
-      </section>
-    `)
+    y = addHeading(doc, y, 'Resumen de la finca')
+    y = addTable(
+      doc,
+      y,
+      ['Indicador', 'Valor'],
+      [
+        ['Toros activos', String(metrics.activeBulls)],
+        ['GMD global', metrics.averageGmd == null ? '—' : `${metrics.averageGmd.toFixed(2)} kg`],
+        ['GMD semanal', metrics.weeklyGmd == null ? '—' : `${metrics.weeklyGmd.toFixed(2)} kg`],
+        ['Alertas pendientes', String(metrics.pendingAlerts)],
+      ],
+    )
   }
 
   if (selection.toros) {
-    const rows =
+    y = addHeading(doc, y, 'Inventario de toros')
+    y = addTable(
+      doc,
+      y,
+      ['Identificador', 'DIIO', 'Nombre', 'Sexo / raza', 'Estado'],
       data.bovines.length === 0
-        ? emptyRow('No hay bovinos registrados en esta finca.', 5)
-        : data.bovines
-            .map(
-              (item) => `
-                <tr>
-                  <td>${escapeHtml(item.identificador_interno)}</td>
-                  <td>${escapeHtml(item.numero_diio ?? '—')}</td>
-                  <td>${escapeHtml(item.nombre ?? '—')}</td>
-                  <td>${item.sexo === 'MACHO' ? 'Macho' : 'Hembra'}${item.raza ? ` · ${escapeHtml(item.raza)}` : ''}</td>
-                  <td>${statusLabel(item.estado)}</td>
-                </tr>
-              `,
-            )
-            .join('')
-    sections.push(`
-      <section>
-        <h2>Inventario de toros</h2>
-        ${table(['Identificador', 'DIIO', 'Nombre', 'Sexo / raza', 'Estado'], rows)}
-      </section>
-    `)
+        ? [['No hay bovinos registrados en esta finca.', '', '', '', '']]
+        : data.bovines.map((item) => [
+            item.identificador_interno,
+            item.numero_diio ?? '—',
+            item.nombre ?? '—',
+            `${item.sexo === 'MACHO' ? 'Macho' : 'Hembra'}${item.raza ? ` · ${item.raza}` : ''}`,
+            statusLabel(item.estado),
+          ]),
+    )
   }
 
   if (selection.pesajes) {
-    const rows =
+    y = addHeading(doc, y, 'Historial de pesajes')
+    y = addTable(
+      doc,
+      y,
+      ['Bovino', 'Fecha', 'Peso'],
       data.weighings.length === 0
-        ? emptyRow('No hay pesajes registrados.', 3)
-        : [...data.weighings]
-            .reverse()
-            .map((item) => {
-              const bovine = byBovine.get(item.bovino_id)
-              return `
-                <tr>
-                  <td>${escapeHtml(bovine ? bovineLabel(bovine) : 'Bovino')}</td>
-                  <td>${formatDate(item.fecha_pesaje)}</td>
-                  <td>${item.peso_kg.toFixed(1)} kg</td>
-                </tr>
-              `
-            })
-            .join('')
-    sections.push(`
-      <section>
-        <h2>Historial de pesajes</h2>
-        ${table(['Bovino', 'Fecha', 'Peso'], rows)}
-      </section>
-    `)
+        ? [['No hay pesajes registrados.', '', '']]
+        : [...data.weighings].reverse().map((item) => {
+            const bovine = byBovine.get(item.bovino_id)
+            return [
+              bovine ? bovineLabel(bovine) : 'Bovino',
+              formatDate(item.fecha_pesaje),
+              `${item.peso_kg.toFixed(1)} kg`,
+            ]
+          }),
+    )
   }
 
   if (selection.inventario) {
-    sections.push(`
-      <section>
-        <h2>Inventario de bodega</h2>
-        ${table(
-          ['Insumo', 'Categoría', 'Cantidad', 'Ubicación'],
-          emptyRow('Aún no hay movimientos de bodega registrados.', 4),
-        )}
-      </section>
-    `)
+    y = addHeading(doc, y, 'Inventario de bodega')
+    y = addTable(
+      doc,
+      y,
+      ['Insumo', 'Categoría', 'Cantidad', 'Ubicación'],
+      [['Aún no hay movimientos de bodega registrados.', '', '', '']],
+    )
   }
 
   if (selection.tratamientos) {
-    const rows =
+    y = addHeading(doc, y, 'Tratamientos y alertas')
+    y = addTable(
+      doc,
+      y,
+      ['Bovino', 'Próxima aplicación', 'Detalle'],
       data.treatments.length === 0
-        ? emptyRow('No hay tratamientos programados.', 3)
-        : data.treatments
-            .map((item) => {
-              const bovine = item.bovino ?? byBovine.get(item.bovino_id)
-              return `
-                <tr>
-                  <td>${escapeHtml(bovine ? bovineLabel(bovine) : 'Bovino')}</td>
-                  <td>${item.proxima_aplicacion ? formatDate(item.proxima_aplicacion) : '—'}</td>
-                  <td>${escapeHtml(item.observaciones ?? 'Aplicación programada')}</td>
-                </tr>
-              `
-            })
-            .join('')
-    sections.push(`
-      <section>
-        <h2>Tratamientos y alertas</h2>
-        ${table(['Bovino', 'Próxima aplicación', 'Detalle'], rows)}
-      </section>
-    `)
+        ? [['No hay tratamientos programados.', '', '']]
+        : data.treatments.map((item) => {
+            const bovine = item.bovino ?? byBovine.get(item.bovino_id)
+            return [
+              bovine ? bovineLabel(bovine) : 'Bovino',
+              item.proxima_aplicacion ? formatDate(item.proxima_aplicacion) : '—',
+              item.observaciones ?? 'Aplicación programada',
+            ]
+          }),
+    )
   }
 
   if (selection.venta) {
-    const rows =
+    y = addHeading(doc, y, 'Evaluación de venta')
+    y = addTable(
+      doc,
+      y,
+      ['Bovino', 'Recomendación', 'Detalle'],
       hints.length === 0
-        ? emptyRow('Agrega bovinos y pesajes para evaluar ventas.', 3)
-        : hints
-            .map(
-              (hint) => `
-                <tr>
-                  <td>${escapeHtml(bovineLabel(hint.bovine))}</td>
-                  <td>${saleLabel(hint.status)}</td>
-                  <td>${escapeHtml(hint.detail)}</td>
-                </tr>
-              `,
-            )
-            .join('')
-    sections.push(`
-      <section>
-        <h2>Evaluación de venta</h2>
-        ${table(['Bovino', 'Recomendación', 'Detalle'], rows)}
-      </section>
-    `)
+        ? [['Agrega bovinos y pesajes para evaluar ventas.', '', '']]
+        : hints.map((hint) => [
+            bovineLabel(hint.bovine),
+            saleLabel(hint.status),
+            hint.detail,
+          ]),
+    )
   }
 
-  return `<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <title>Reporte BoviTrack · ${escapeHtml(data.farmName)}</title>
-    <style>
-      :root { color-scheme: light; }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        padding: 32px;
-        font-family: "Source Sans 3", "Segoe UI", sans-serif;
-        color: #44403c;
-        background: #fff;
-      }
-      header { border-bottom: 2px solid #1b5d3b; padding-bottom: 16px; margin-bottom: 24px; }
-      .brand { font-size: 12px; letter-spacing: 0.18em; color: #1b5d3b; font-weight: 600; }
-      h1 { margin: 6px 0 4px; font-family: Fraunces, Georgia, serif; font-size: 28px; color: #1c1917; }
-      .meta { margin: 0; font-size: 13px; color: #78716c; }
-      h2 {
-        margin: 0 0 12px;
-        font-family: Fraunces, Georgia, serif;
-        font-size: 20px;
-        color: #1c1917;
-      }
-      section { margin-bottom: 28px; break-inside: avoid; }
-      .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-      .metrics article {
-        border: 1px solid #e7e5e4;
-        border-radius: 12px;
-        padding: 14px;
-      }
-      .metrics strong { display: block; font-size: 22px; color: #1c1917; }
-      .metrics span { font-size: 12px; color: #78716c; }
-      table { width: 100%; border-collapse: collapse; font-size: 12px; }
-      th, td { border-bottom: 1px solid #e7e5e4; text-align: left; padding: 8px 6px; }
-      th { color: #1b5d3b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-      .empty { color: #a8a29e; font-style: italic; }
-      footer { margin-top: 32px; font-size: 11px; color: #a8a29e; }
-      @media print {
-        body { padding: 0; }
-        @page { margin: 16mm; }
-      }
-    </style>
-  </head>
-  <body>
-    <header>
-      <p class="brand">BOVITRACK · GANADERÍA & CAMPO</p>
-      <h1>Reporte de ${escapeHtml(data.farmName)}</h1>
-      <p class="meta">
-        ${data.farmLocation ? `${escapeHtml(data.farmLocation)} · ` : ''}
-        Generado el ${escapeHtml(formatDateTime(data.generatedAt))}
-      </p>
-    </header>
-    ${sections.join('')}
-    <footer>Documento generado desde BoviTrack. En el diálogo de impresión elige Guardar como PDF.</footer>
-  </body>
-</html>`
-}
-
-export function openReportPrintWindow(html: string) {
-  const frame = document.createElement('iframe')
-  frame.setAttribute('aria-hidden', 'true')
-  frame.style.position = 'fixed'
-  frame.style.right = '0'
-  frame.style.bottom = '0'
-  frame.style.width = '0'
-  frame.style.height = '0'
-  frame.style.border = '0'
-  document.body.appendChild(frame)
-
-  const doc = frame.contentDocument
-  const win = frame.contentWindow
-  if (!doc || !win) {
-    frame.remove()
-    throw new Error('No se pudo preparar el reporte para imprimir.')
+  const pageCount = doc.getNumberOfPages()
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page)
+    doc.setFontSize(8)
+    doc.setTextColor(168, 162, 158)
+    doc.text(
+      `Documento generado desde BoviTrack · ${page}/${pageCount}`,
+      14,
+      doc.internal.pageSize.getHeight() - 10,
+    )
   }
 
-  doc.open()
-  doc.write(html)
-  doc.close()
-
-  window.setTimeout(() => {
-    win.focus()
-    win.print()
-    window.setTimeout(() => frame.remove(), 2000)
-  }, 350)
+  return doc.output('blob') as Blob
 }
+
+function isAbortError(cause: unknown) {
+  return cause instanceof DOMException && cause.name === 'AbortError'
+}
+
+export async function saveReportPdf(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export { isAbortError }

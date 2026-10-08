@@ -2,6 +2,7 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  CalendarDays,
   ChevronDown,
   ClipboardList,
   FileText,
@@ -54,6 +55,7 @@ export default function HomePage() {
   const [metrics, setMetrics] = useState({
     activeBulls: 0,
     averageGmd: null as number | null,
+    weeklyGmd: null as number | null,
     pendingAlerts: 0,
   })
   const [toast, setToast] = useState<{
@@ -94,7 +96,7 @@ export default function HomePage() {
       setTasks([])
       setTreatments([])
       setHints([])
-      setMetrics({ activeBulls: 0, averageGmd: null, pendingAlerts: 0 })
+      setMetrics({ activeBulls: 0, averageGmd: null, weeklyGmd: null, pendingAlerts: 0 })
       return
     }
 
@@ -312,7 +314,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <div className="mb-5 grid grid-cols-3 gap-2">
+      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <MetricCard
           icon={<Activity className="size-4" />}
           label="Toros activos"
@@ -325,6 +327,15 @@ export default function HomePage() {
             metrics.averageGmd == null
               ? '—'
               : `${metrics.averageGmd.toFixed(2)} kg`
+          }
+        />
+        <MetricCard
+          icon={<CalendarDays className="size-4" />}
+          label="GMD semanal"
+          value={
+            metrics.weeklyGmd == null
+              ? '—'
+              : `${metrics.weeklyGmd.toFixed(2)} kg`
           }
         />
         <MetricCard
@@ -453,7 +464,7 @@ export default function HomePage() {
               <Shortcut
                 to="/reporte"
                 icon={<FileText className="size-5" />}
-                label="Generar reporte PDF"
+                label="Reporte semanal / PDF"
               />
               <Shortcut
                 to="/inventario"

@@ -1,3 +1,4 @@
+import { bovineGmd } from './gmd.ts'
 import { supabase } from './supabase.ts'
 import type {
   Bovine,
@@ -303,17 +304,11 @@ export function computeMetrics(
   }
 
   const gmds: number[] = []
+  const weeklyGmds: number[] = []
   for (const bovine of active) {
-    const list = byBovine.get(bovine.id) ?? []
-    if (list.length < 2) continue
-    const first = list[0]
-    const last = list[list.length - 1]
-    const days =
-      (new Date(last.fecha_pesaje).getTime() -
-        new Date(first.fecha_pesaje).getTime()) /
-      86_400_000
-    if (days <= 0) continue
-    gmds.push((last.peso_kg - first.peso_kg) / days)
+    const gmd = bovineGmd(byBovine.get(bovine.id) ?? [])
+    if (gmd.lifetime != null) gmds.push(gmd.lifetime)
+    if (gmd.weekly != null) weeklyGmds.push(gmd.weekly)
   }
 
   const today = todayIso()
@@ -327,6 +322,10 @@ export function computeMetrics(
     averageGmd:
       gmds.length > 0
         ? gmds.reduce((sum, value) => sum + value, 0) / gmds.length
+        : null,
+    weeklyGmd:
+      weeklyGmds.length > 0
+        ? weeklyGmds.reduce((sum, value) => sum + value, 0) / weeklyGmds.length
         : null,
     pendingAlerts,
   }

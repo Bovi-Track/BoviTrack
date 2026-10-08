@@ -28,6 +28,7 @@ import {
   createSanitaryRecord,
   removeSanitaryRecord
 } from '../lib/dashboard.ts'
+import { bovineGmd } from '../lib/gmd.ts'
 import type { Bovine, BovineStatus, Weighing } from '../types/dashboard.ts'
 
 type BullDraft = {
@@ -1254,6 +1255,7 @@ function WeightHistory({ weighings }: { weighings: Weighing[] }) {
   const first = sorted[0]
   const gain =
     first && latest && sorted.length > 1 ? latest.peso_kg - first.peso_kg : null
+  const gmd = bovineGmd(sorted)
 
   return (
     <div className="space-y-4">
@@ -1275,6 +1277,30 @@ function WeightHistory({ weighings }: { weighings: Weighing[] }) {
               {gain.toFixed(1)} kg
             </p>
           ) : null}
+        </div>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-cream px-3 py-3">
+            <p className="text-[11px] text-stone-500">GMD</p>
+            <p className="font-serif text-xl font-semibold text-stone-900">
+              {gmd.lifetime == null ? '—' : `${gmd.lifetime.toFixed(2)} kg`}
+            </p>
+            <p className="text-[11px] text-stone-400">primer a último pesaje</p>
+          </div>
+          <div className="rounded-2xl bg-cream px-3 py-3">
+            <p className="text-[11px] text-stone-500">GMD semanal</p>
+            <p
+              className={`font-serif text-xl font-semibold ${
+                gmd.weekly == null
+                  ? 'text-stone-900'
+                  : gmd.weekly < 0
+                    ? 'text-red-700'
+                    : 'text-bovi'
+              }`}
+            >
+              {gmd.weekly == null ? '—' : `${gmd.weekly.toFixed(2)} kg`}
+            </p>
+            <p className="text-[11px] text-stone-400">sábados o últimos dos pesajes</p>
+          </div>
         </div>
         <WeightCurve points={sorted} />
       </section>

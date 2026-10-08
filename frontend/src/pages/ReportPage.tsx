@@ -1,19 +1,23 @@
-import { FileText, Printer } from 'lucide-react'
+import { FileText, Save } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Toast } from '../components/dashboard/Toast.tsx'
+import { WeeklyReportCard } from '../components/dashboard/WeeklyReportCard.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
 import {
   loadBovines,
   loadTreatments,
   loadWeighings,
 } from '../lib/dashboard.ts'
+import { buildWeeklyReport } from '../lib/gmd.ts'
 import {
   REPORT_SECTIONS,
-  buildReportHtml,
+  buildReportPdf,
   defaultReportSelection,
-  openReportPrintWindow,
+  isAbortError,
+  saveReportPdf,
   selectedSectionCount,
+  suggestedReportFilename,
   type ReportData,
   type ReportSelection,
 } from '../lib/report.ts'
@@ -26,6 +30,7 @@ export default function ReportPage() {
   const [weighings, setWeighings] = useState<Weighing[]>([])
   const [treatments, setTreatments] = useState<Treatment[]>([])
   const [loadingData, setLoadingData] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{
     message: string
     tone: 'ok' | 'warn' | 'error'
@@ -94,7 +99,7 @@ export default function ReportPage() {
     setSelection((current) => ({ ...current, [id]: !current[id] }))
   }
 
-  function generate() {
+  async function generate() {
     if (!reportData) {
       setToast({ message: 'Selecciona una finca activa desde Inicio.', tone: 'warn' })
       return
@@ -106,20 +111,29 @@ export default function ReportPage() {
       })
       return
     }
+    setSaving(true)
     try {
-      openReportPrintWindow(buildReportHtml(reportData, selection))
+      const blob = buildReportPdf(reportData, selection)
+      const filename = suggestedReportFilename(
+        reportData.farmName,
+        reportData.generatedAt,
+      )
+      await saveReportPdf(blob, filename)
       setToast({
-        message: 'En el diálogo de impresión elige Guardar como PDF.',
+        message: 'Elige la carpeta y guarda el PDF.',
         tone: 'ok',
       })
     } catch (cause) {
+      if (isAbortError(cause)) return
       setToast({
         message:
           cause instanceof Error
             ? cause.message
-            : 'No se pudo abrir el reporte.',
+            : 'No se pudo guardar el PDF.',
         tone: 'error',
       })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -136,14 +150,23 @@ export default function ReportPage() {
           DOCUMENTOS
         </p>
         <h1 className="mt-1 font-serif text-3xl font-semibold text-stone-900">
-          Generar reporte PDF
+          Reporte semanal
         </h1>
         <p className="mt-1 text-sm text-stone-500">
           {activeFarm
-            ? `Elige qué incluir del reporte de ${activeFarm.nombre}.`
-            : 'Selecciona una finca desde Inicio para generar el reporte.'}
+            ? `GMD y estructura del hato de ${activeFarm.nombre}. También puedes generar el PDF.`
+            : 'Selecciona una finca desde Inicio para ver el reporte.'}
         </p>
       </header>
+
+      {activeFarm && reportData ? (
+        <div className="mb-5">
+          <WeeklyReportCard
+            farmName={activeFarm.nombre}
+            report={buildWeeklyReport(bovines, weighings)}
+          />
+        </div>
+      ) : null}
 
       <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -184,14 +207,14 @@ export default function ReportPage() {
         <button
           type="button"
           onClick={generate}
-          disabled={!activeFarm || loadingData || selectedCount === 0}
+          disabled={!activeFarm || loadingData || saving || selectedCount === 0}
           className="mt-5 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-bovi text-sm font-semibold text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Printer className="size-4" />
-          {loadingData ? 'Cargando datos…' : 'Generar PDF'}
+          <Save className="size-4" />
+          {loadingData ? 'Cargando datos…' : saving ? 'Guardando…' : 'Guardar PDF'}
         </button>
         <p className="mt-3 text-center text-xs text-stone-400">
-          Se abre el diálogo de impresión. Selecciona Guardar como PDF para descargarlo.
+          Elige la carpeta y el nombre del archivo.
         </p>
       </section>
 
