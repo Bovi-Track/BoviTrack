@@ -1,4 +1,4 @@
-import { Plus, Scale, Search } from 'lucide-react'
+import { FileText, Plus, Scale, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthProvider.tsx'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
@@ -14,6 +14,11 @@ import {
   weighingErrorMessage,
   writePendingWeighings,
 } from '../lib/dashboard.ts'
+import {
+  buildWeeklyReportPdf,
+  isAbortError,
+  saveReportPdf,
+} from '../lib/report.ts'
 import type { Bovine, Weighing } from '../types/dashboard.ts'
 
 type WeighingRow = Weighing & { bovine?: Bovine }
@@ -34,6 +39,7 @@ export default function WeighingsPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [submitting, setSubmitting] = useState(false)
+  const [savingReport, setSavingReport] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<{
     message: string
@@ -92,6 +98,32 @@ export default function WeighingsPage() {
       return label.toLowerCase().includes(term)
     })
   }, [query, rows])
+
+  async function saveWeeklyReport() {
+    if (!activeFarm) {
+      setToast({ message: 'Selecciona una finca activa desde Inicio.', tone: 'warn' })
+      return
+    }
+    setSavingReport(true)
+    try {
+      const { blob, filename } = buildWeeklyReportPdf({
+        farmName: activeFarm.nombre,
+        bovines,
+        weighings: rows,
+      })
+      await saveReportPdf(blob, filename)
+      setToast({ message: 'Elige la carpeta y guarda el PDF.', tone: 'ok' })
+    } catch (cause) {
+      if (isAbortError(cause)) return
+      setToast({
+        message:
+          cause instanceof Error ? cause.message : 'No se pudo guardar el PDF.',
+        tone: 'error',
+      })
+    } finally {
+      setSavingReport(false)
+    }
+  }
 
   function update(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -172,18 +204,29 @@ export default function WeighingsPage() {
               : 'Selecciona una finca desde Inicio para ver los pesajes.'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setError('')
-            setOpen(true)
-          }}
-          disabled={!activeFarm}
-          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Plus className="size-4" />
-          Agregar
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void saveWeeklyReport()}
+            disabled={!activeFarm || savingReport}
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FileText className="size-4 text-bovi" />
+            {savingReport ? 'Preparando…' : 'PDF semanal'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setError('')
+              setOpen(true)
+            }}
+            disabled={!activeFarm}
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="size-4" />
+            Agregar
+          </button>
+        </div>
       </header>
 
       <div className="relative mb-4">
