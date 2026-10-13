@@ -1,6 +1,3 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { useAuth } from './auth/AuthProvider.tsx'
-import { AppShell } from './components/dashboard/AppShell.tsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.tsx'
 import FarmManagePage from './pages/FarmManagePage.tsx'
 import BullsPage from './pages/BullsPage.tsx'
@@ -15,8 +12,12 @@ import ResetPasswordPage from './pages/ResetPasswordPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
 import TasksPage from './pages/TasksPage.tsx'
 import WeighingsPage from './pages/WeighingsPage.tsx'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { useAuth } from './auth/useAuth.ts'
+import { AppShell } from './components/dashboard/AppShell.tsx'
 import type { ReactNode } from 'react'
 
+// RF-UC14-01 (parcial): exige sesión para entrar a las rutas privadas.
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
 
@@ -35,6 +36,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return children
 }
 
+// Define las rutas públicas y las pantallas operativas de la aplicación.
 function App() {
   return (
     <Routes>

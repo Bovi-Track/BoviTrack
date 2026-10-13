@@ -3,6 +3,7 @@ type ToastProps = {
   tone?: 'ok' | 'warn' | 'error'
 }
 
+// Presenta una confirmación o error visual con el tono recibido.
 export function Toast({ message, tone = 'ok' }: ToastProps) {
   const toneClass =
     tone === 'error'

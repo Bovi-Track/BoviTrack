@@ -1,22 +1,14 @@
+import { SegmentButton } from '../components/dashboard/SegmentButton.tsx'
+import { formatDayLong, todayIso } from '../lib/dates.ts'
 import { ClipboardList, Plus, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
-import { roleLabel, todayIso, loadTasks, createTask, updateTaskDone } from '../lib/dashboard.ts'
-import { loadFarmMembers } from '../lib/farm-manage.ts'
-import type { FarmMember } from '../types/dashboard.ts'
-
-type TaskItem = {
-  id: string
-  titulo: string
-  descripcion: string
-  estado: 'PENDIENTE' | 'COMPLETADA'
-  fecha_limite: string
-  asignada_a: string | null
-  asignada_nombre: string
-}
+import { useFarm } from '../context/useFarm.ts'
+import { roleLabel, loadFarmMembers } from '../lib/farms.ts'
+import { loadTasks, createTask, updateTaskDone } from '../lib/tasks.ts'
+import type { FarmMember, Task } from '../types/dashboard.ts'
 
 const emptyForm = {
   titulo: '',
@@ -25,11 +17,12 @@ const emptyForm = {
   fecha_limite: todayIso(),
 }
 
+// RF-UC11-01 y RF-UC11-02 (parcial): coordina consulta, asignación y estado de tareas.
 export default function TasksPage() {
   const { user } = useAuth()
   const { activeFarm, role, loading } = useFarm()
   const [members, setMembers] = useState<FarmMember[]>([])
-  const [tasks, setTasks] = useState<TaskItem[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
   const [scope, setScope] = useState<'mias' | 'equipo'>('mias')
   const [status, setStatus] = useState<'pendientes' | 'hechas' | 'todas'>('pendientes')
   const [query, setQuery] = useState('')
@@ -60,6 +53,7 @@ export default function TasksPage() {
     const farmId = activeFarm.id
     let active = true
     
+    // Carga tareas y miembros para la finca actual sin conservar respuestas anteriores.
     async function loadData() {
       try {
         const [membersData, tasksData] = await Promise.all([
@@ -68,7 +62,7 @@ export default function TasksPage() {
         ])
         if (active) {
           setMembers(membersData)
-          setTasks(tasksData as TaskItem[])
+          setTasks(tasksData)
         }
       } catch {
         if (active) {
@@ -122,10 +116,12 @@ export default function TasksPage() {
       task.estado === 'PENDIENTE' && (!task.asignada_a || task.asignada_a === user?.id),
   ).length
 
+  // Actualiza un campo del formulario de asignación de tareas.
   function update(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  // RF-UC11-01 (parcial): crea la tarea asignada y recarga su lista confirmada.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!activeFarm) return
@@ -140,7 +136,7 @@ export default function TasksPage() {
       )
       
       const updatedTasks = await loadTasks(activeFarm.id)
-      setTasks(updatedTasks as TaskItem[])
+      setTasks(updatedTasks)
       
       setOpen(false)
       setForm({ ...emptyForm, fecha_limite: todayIso() })
@@ -155,12 +151,13 @@ export default function TasksPage() {
           ? `Tarea asignada a ${memberLabel(assignee)}.`
           : 'Tarea guardada en tu lista.',
       )
-    } catch (err) {
+    } catch {
       setToast('No se pudo guardar la tarea. Intenta de nuevo.')
     }
   }
 
-  async function toggle(task: TaskItem) {
+  // RF-UC11-02: cambia el estado de una tarea y actualiza la lista tras la confirmación.
+  async function toggle(task: Task) {
     const nextStatus = task.estado === 'COMPLETADA' ? false : true
     try {
       await updateTaskDone(task.id, nextStatus)
@@ -174,7 +171,7 @@ export default function TasksPage() {
             : item,
         ),
       )
-    } catch (err) {
+    } catch {
       setToast('No se pudo actualizar la tarea.')
     }
   }
@@ -221,11 +218,13 @@ export default function TasksPage() {
 
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
         <SegmentButton
+          className="px-2"
           active={scope === 'mias'}
           onClick={() => setScope('mias')}
           label={`Mis tareas${mineCount ? ` · ${mineCount}` : ''}`}
         />
         <SegmentButton
+          className="px-2"
           active={scope === 'equipo'}
           onClick={() => setScope('equipo')}
           label="Del equipo"
@@ -308,7 +307,7 @@ export default function TasksPage() {
                               : 'bg-amber-100 text-amber-900'
                         }`}
                       >
-                        {done ? 'Hecha' : overdue ? 'Vencida' : formatIso(task.fecha_limite)}
+                        {done ? 'Hecha' : overdue ? 'Vencida' : formatDayLong(task.fecha_limite, false)}
                       </span>
                     </span>
                     {task.descripcion ? (
@@ -318,7 +317,7 @@ export default function TasksPage() {
                     ) : null}
                     <span className="mt-2 block text-xs text-stone-500">
                       {task.asignada_nombre}
-                      {done || overdue ? ` · ${formatIso(task.fecha_limite)}` : ''}
+                      {done || overdue ? ` · ${formatDayLong(task.fecha_limite, false)}` : ''}
                     </span>
                   </span>
                 </label>
@@ -394,38 +393,8 @@ export default function TasksPage() {
   )
 }
 
+// Prefiere el nombre del miembro y utiliza su correo cuando el nombre está vacío.
 function memberLabel(member: Pick<FarmMember, 'nombre' | 'email'>) {
   const name = member.nombre?.trim()
   return name || member.email
-}
-
-function formatIso(iso: string) {
-  const [year, month, day] = iso.split('-').map(Number)
-  if (!year || !month || !day) return iso
-  return new Date(year, month - 1, day).toLocaleDateString('es-CR', {
-    day: 'numeric',
-    month: 'short',
-  })
-}
-
-function SegmentButton({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`min-h-11 cursor-pointer rounded-xl px-2 text-sm font-medium ${
-        active ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
-      }`}
-    >
-      {label}
-    </button>
-  )
 }

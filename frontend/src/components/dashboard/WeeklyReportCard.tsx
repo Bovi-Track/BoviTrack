@@ -1,13 +1,7 @@
-import {
-  Activity,
-  Beef,
-  CalendarDays,
-  Scale,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react'
+import { formatDayLong as formatDay } from '../../lib/dates.ts'
+import { Activity, Beef, CalendarDays, Scale, TrendingDown, TrendingUp } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { bovineLabel } from '../../lib/dashboard.ts'
+import { bovineLabel } from '../../lib/bovines.ts'
 import {
   EXPECTED_GMD_KG,
   LOW_GMD_KG,
@@ -16,16 +10,7 @@ import {
   type WeeklyReport,
 } from '../../lib/gmd.ts'
 
-function formatDay(iso: string) {
-  const [year, month, day] = iso.split('-').map(Number)
-  if (!year || !month || !day) return iso
-  return new Date(year, month - 1, day).toLocaleDateString('es-CR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
+// Presenta la comparación porcentual de una métrica con su indicador visual.
 function ChangeBadge({ value }: { value: number | null }) {
   const change = formatPct(value)
   if (!change) {
@@ -51,6 +36,7 @@ function ChangeBadge({ value }: { value: number | null }) {
   )
 }
 
+// Presenta una métrica del resumen semanal y su comparación disponible.
 function StatTile({
   icon,
   label,
@@ -78,6 +64,7 @@ function StatTile({
   )
 }
 
+// Presenta una fila de la estructura del hato con etiqueta y valor.
 function StructureRow({ label, value }: { label: string; value: string | number }) {
   return (
     <li className="flex items-center justify-between gap-3 py-3 text-[15px]">
@@ -87,11 +74,13 @@ function StructureRow({ label, value }: { label: string; value: string | number 
   )
 }
 
+// Presenta el peso del resumen semanal con su unidad o un dato ausente.
 function kg(value: number | null, digits: number) {
   if (value == null) return '—'
   return `${value.toFixed(digits)} Kg`
 }
 
+// RF-UC06-02 y RF-TR-03 (parcial): presenta el resumen semanal calculado del hato.
 export function WeeklyReportCard({
   farmName,
   report,

@@ -1,38 +1,16 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { FarmContext } from './useFarm.ts'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useAuth } from '../auth/useAuth.ts'
 import {
   createFarm as createFarmRequest,
   getStoredFarmId,
   loadUserFarms,
   storeFarmId,
-} from '../lib/dashboard.ts'
-import { updateFarm as updateFarmRequest } from '../lib/farm-manage.ts'
+  updateFarm as updateFarmRequest,
+} from '../lib/farms.ts'
 import type { Farm, FarmRole } from '../types/dashboard.ts'
 
-type FarmContextValue = {
-  farms: Farm[]
-  rolesByFarm: Record<string, FarmRole>
-  activeFarm: Farm | null
-  role: FarmRole
-  loading: boolean
-  loadedUserId: string | null
-  setActiveFarmId: (id: string) => void
-  createAndSelectFarm: (nombre: string, ubicacion: string) => Promise<Farm>
-  updateActiveFarm: (patch: Partial<Pick<Farm, 'nombre' | 'ubicacion' | 'activo'>>) => Promise<Farm>
-  refreshFarms: () => Promise<void>
-}
-
-const FarmContext = createContext<FarmContextValue | undefined>(undefined)
-
+// RF-UC03-01 y RF-UC14-03: mantiene la finca seleccionada y roles vinculados al usuario.
 export function FarmProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [farms, setFarms] = useState<Farm[]>([])
@@ -44,6 +22,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null)
   const refreshRequest = useRef(0)
 
+  // RF-UC03-01 y RF-UC14-03: recarga fincas y roles, descartando respuestas anteriores.
   const refreshFarms = useCallback(async () => {
     const request = ++refreshRequest.current
     if (!user) {
@@ -84,11 +63,13 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     void refreshFarms()
   }, [refreshFarms])
 
+  // RF-UC03-01: selecciona la finca de trabajo y conserva la preferencia del navegador.
   const setActiveFarmId = useCallback((id: string) => {
     storeFarmId(id)
     setActiveFarmIdState(id)
   }, [])
 
+  // RF-UC03-01: crea una finca y actualiza la selección y rol de su administrador.
   const createAndSelectFarm = useCallback(
     async (nombre: string, ubicacion: string) => {
       const farm = await createFarmRequest(nombre, ubicacion)
@@ -105,7 +86,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     [user?.id],
   )
 
-  // Para actualizar lo que es los datos de la finca, nombre, ubicacion, o estado
+  // RF-UC03-01: guarda cambios de la finca seleccionada y actualiza su estado compartido.
   const updateActiveFarm = useCallback(
     async (patch: Partial<Pick<Farm, 'nombre' | 'ubicacion' | 'activo'>>) => {
       if (!activeFarmId) throw new Error('No hay finca activa seleccionada.')
@@ -125,7 +106,8 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   )
 
   const activeFarm = farms.find((farm) => farm.id === activeFarmId) ?? null
-  const role = activeFarm ? (rolesByFarm[activeFarm.id] ?? 'admin') : 'admin'
+  const role = activeFarm && loadedUserId === user?.id
+    ? (rolesByFarm[activeFarm.id] ?? 'unknown') : 'unknown'
 
   const value = useMemo(
     () => ({
@@ -155,12 +137,4 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   )
 
   return <FarmContext.Provider value={value}>{children}</FarmContext.Provider>
-}
-
-export function useFarm() {
-  const context = useContext(FarmContext)
-  if (!context) {
-    throw new Error('useFarm debe usarse dentro de FarmProvider')
-  }
-  return context
 }

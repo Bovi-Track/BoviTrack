@@ -1,16 +1,14 @@
 import { AtSign, Lock, Mail, User } from 'lucide-react'
 import { useState, type SubmitEventHandler } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
 import { PasswordRules } from '../components/auth/PasswordRules.tsx'
 import { mensajeAuth, registrarUsuario } from '../lib/auth.ts'
-import {
-  MIN_PASSWORD_LENGTH,
-  validarPasswordRegistro,
-} from '../lib/passwordPolicy.ts'
+import { MIN_PASSWORD_LENGTH, validarPasswordRegistro } from '../lib/passwordPolicy.ts'
 
+// Presenta el registro público actual de cuentas, cuyo alcance está pendiente de confirmar.
 export default function RegisterPage() {
   const { user, loading, passwordRecovery } = useAuth()
   const navigate = useNavigate()
@@ -27,6 +25,7 @@ export default function RegisterPage() {
     return <Navigate to="/inicio" replace />
   }
 
+  // Valida el registro público y solicita crear la cuenta; no cubre el alta administrativa de RF-UC15-01.
   const onSubmit: SubmitEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault()
     const passwordError = validarPasswordRegistro(password, confirmPassword, {

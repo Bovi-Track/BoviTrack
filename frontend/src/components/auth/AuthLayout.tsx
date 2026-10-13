@@ -1,12 +1,13 @@
+import campoImg from '../../assets/campo.png'
 import { ArrowUpRight, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
-import campoImg from '../../assets/campo.png'
 
 type AuthLayoutProps = {
   children: ReactNode
   brandIcon: 'user' | 'arrow'
 }
 
+// Presenta el marco visual compartido por los formularios de autenticación.
 export function AuthLayout({ children, brandIcon }: AuthLayoutProps) {
   return (
     <div className="flex min-h-svh bg-cream">

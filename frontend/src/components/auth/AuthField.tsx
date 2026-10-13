@@ -8,6 +8,7 @@ type AuthFieldProps = InputHTMLAttributes<HTMLInputElement> & {
   hint?: ReactNode
 }
 
+// Presenta un campo de autenticación con etiqueta, icono y atributos de entrada.
 export function AuthField({
   id,
   label,

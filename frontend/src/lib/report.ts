@@ -1,6 +1,8 @@
-import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { bovineLabel, computeMetrics, saleHints } from './dashboard.ts'
+import { bovineStatusLabel, bovineLabel } from './bovines.ts'
+import { formatDate, formatDayLong } from './dates.ts'
+import { jsPDF } from 'jspdf'
+import { computeMetrics, saleHints } from './dashboard.ts'
 import {
   EXPECTED_GMD_KG,
   LOW_GMD_KG,
@@ -10,8 +12,7 @@ import {
   type WeeklyReport,
 } from './gmd.ts'
 import type { Bovine, SaleHint, Treatment, Weighing } from '../types/dashboard.ts'
-import type { InventoryReport } from '../types/inventory.ts'
-import { movementLabels } from '../types/inventory.ts'
+import { type InventoryReport, movementLabels } from '../types/inventory.ts'
 import { parseInventoryReport } from './inventory.ts'
 
 export type ReportSectionId =
@@ -79,6 +80,7 @@ export type ReportData = {
 
 export type ReportSelection = Record<ReportSectionId, boolean>
 
+// Inicializa las secciones habituales del PDF dejando inventario sin seleccionar.
 export function defaultReportSelection(): ReportSelection {
   return {
     semanal: true,
@@ -91,16 +93,12 @@ export function defaultReportSelection(): ReportSelection {
   }
 }
 
+// Cuenta las secciones habilitadas en la selección actual del reporte.
 export function selectedSectionCount(selection: ReportSelection) {
   return REPORT_SECTIONS.filter((section) => selection[section.id]).length
 }
 
-function formatDate(value: string) {
-  const [year, month, day] = value.split('-')
-  if (!year || !month || !day) return value
-  return `${day}/${month}/${year}`
-}
-
+// Presenta el instante de generación con fecha y hora locales en español.
 function formatDateTime(iso: string) {
   const date = new Date(iso)
   return new Intl.DateTimeFormat('es-CR', {
@@ -109,28 +107,20 @@ function formatDateTime(iso: string) {
   }).format(date)
 }
 
-function statusLabel(estado: Bovine['estado']) {
-  const map: Record<Bovine['estado'], string> = {
-    ACTIVO: 'Activo',
-    INACTIVO: 'Inactivo',
-    VENDIDO: 'Vendido',
-    BAJA: 'Baja',
-    MUERTO: 'Muerto',
-  }
-  return map[estado]
-}
-
+// Traduce la sugerencia heredada de venta a su etiqueta del PDF.
 function saleLabel(status: SaleHint['status']) {
   if (status === 'apto') return 'Apto para venta'
   if (status === 'falta') return 'Falta información'
   return 'Mantener'
 }
 
+// Obtiene la posición final de la última tabla para continuar el documento.
 function lastTableY(doc: jsPDF) {
   const extra = doc as jsPDF & { lastAutoTable?: { finalY: number } }
   return extra.lastAutoTable?.finalY ?? 20
 }
 
+// Abre una nueva página si el bloque siguiente no cabe en el espacio disponible.
 function ensureSpace(doc: jsPDF, y: number, needed: number) {
   const bottom = doc.internal.pageSize.getHeight() - 18
   if (y + needed <= bottom) return y
@@ -138,6 +128,7 @@ function ensureSpace(doc: jsPDF, y: number, needed: number) {
   return 18
 }
 
+// Dibuja un título de sección respetando el margen y el salto de página.
 function addHeading(doc: jsPDF, y: number, title: string) {
   const next = ensureSpace(doc, y, 16)
   doc.setFont('helvetica', 'bold')
@@ -147,6 +138,7 @@ function addHeading(doc: jsPDF, y: number, title: string) {
   return next + 6
 }
 
+// Dibuja una nota con texto ajustado al ancho disponible del PDF.
 function addNote(doc: jsPDF, y: number, text: string) {
   const next = ensureSpace(doc, y, 8)
   doc.setFont('helvetica', 'normal')
@@ -157,6 +149,7 @@ function addNote(doc: jsPDF, y: number, text: string) {
   return next + lines.length * 4 + 2
 }
 
+// Dibuja una tabla con estilos compartidos y devuelve la posición siguiente.
 function addTable(
   doc: jsPDF,
   y: number,
@@ -180,6 +173,7 @@ function addTable(
   return lastTableY(doc) + 8
 }
 
+// Normaliza el nombre de finca para usarlo en nombres de archivos.
 function safeFarmSlug(farmName: string) {
   return farmName
     .normalize('NFD')
@@ -188,29 +182,23 @@ function safeFarmSlug(farmName: string) {
     .replace(/^-|-$/g, '')
 }
 
+// Construye el nombre sugerido del reporte con finca y fecha de generación.
 export function suggestedReportFilename(farmName: string, generatedAt: string) {
   const date = generatedAt.slice(0, 10)
   return `BoviTrack-${safeFarmSlug(farmName) || 'finca'}-${date}.pdf`
 }
 
+// Construye el nombre sugerido del PDF semanal con finca y sábado de referencia.
 export function suggestedWeeklyFilename(farmName: string, saturday: string) {
   return `BoviTrack-${safeFarmSlug(farmName) || 'finca'}-semanal-${saturday}.pdf`
 }
 
-function formatDayLong(iso: string) {
-  const [year, month, day] = iso.split('-').map(Number)
-  if (!year || !month || !day) return iso
-  return new Date(year, month - 1, day).toLocaleDateString('es-CR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
+// Presenta pesos del PDF con decimales y unidad, o un dato ausente.
 function kgLabel(value: number | null, digits: number) {
   return value == null ? '—' : `${value.toFixed(digits)} Kg`
 }
 
+// Dibuja una variación porcentual con color según su sentido.
 function drawChangeBadge(doc: jsPDF, x: number, y: number, changePct: number | null) {
   const change = formatPct(changePct)
   const label = change?.text ?? '—'
@@ -234,6 +222,7 @@ function drawChangeBadge(doc: jsPDF, x: number, y: number, changePct: number | n
 
 type MetricIcon = 'scale' | 'beef' | 'calendar' | 'activity'
 
+// Dibuja los iconos vectoriales de las métricas del reporte semanal.
 function drawMetricIcon(doc: jsPDF, kind: MetricIcon, cx: number, cy: number) {
   doc.setDrawColor(87, 83, 78)
   doc.setFillColor(87, 83, 78)
@@ -278,6 +267,7 @@ function drawMetricIcon(doc: jsPDF, kind: MetricIcon, cx: number, cy: number) {
   doc.line(cx + 1.8, cy, cx + 3.3, cy)
 }
 
+// Dibuja una tarjeta de métrica y su comparación en el PDF semanal.
 function drawMetricCard(
   doc: jsPDF,
   x: number,
@@ -305,6 +295,7 @@ function drawMetricCard(
   drawChangeBadge(doc, badgeX, y + 23.2, changePct)
 }
 
+// Dibuja el resumen visual semanal, estructura del hato y tabla de pesos.
 function addWeeklyVisual(doc: jsPDF, farmName: string, weekly: WeeklyReport) {
   const pageWidth = doc.internal.pageSize.getWidth()
 
@@ -397,6 +388,7 @@ function addWeeklyVisual(doc: jsPDF, farmName: string, weekly: WeeklyReport) {
   )
 }
 
+// RF-TR-03 (parcial): genera el PDF semanal a partir del hato y sus pesajes.
 export function buildWeeklyReportPdf(data: {
   farmName: string
   bovines: ReportData['bovines']
@@ -422,6 +414,8 @@ export function buildWeeklyReportPdf(data: {
   }
 }
 
+// RF-TR-03 (parcial): genera las secciones elegidas con datos reales de bodega por periodo.
+// Las demás secciones conservan su comportamiento actual y sus pendientes funcionales.
 export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   if (selection.inventario && !data.inventory) throw new Error('Faltan los datos confirmados del inventario de bodega.')
   const inventory = selection.inventario ? parseInventoryReport(data.inventory) : undefined
@@ -496,7 +490,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
             item.numero_diio ?? '—',
             item.nombre ?? '—',
             `${item.sexo === 'MACHO' ? 'Macho' : 'Hembra'}${item.raza ? ` · ${item.raza}` : ''}`,
-            statusLabel(item.estado),
+            bovineStatusLabel(item.estado),
           ]),
     )
   }
@@ -523,6 +517,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   if (selection.inventario) {
     y = addHeading(doc, y, 'Inventario de bodega')
     if (!inventory) throw new Error('Faltan los datos confirmados del inventario de bodega.')
+    // Formatea las cantidades de bodega para las tablas del PDF.
     const qty = (n: number) => n.toLocaleString('es-CR', { maximumFractionDigits: 2 })
     y = addNote(doc, y, `${inventory.finca_nombre} · Del ${formatDate(inventory.desde)} al ${formatDate(inventory.hasta)} (inclusive).`)
     y = addNote(doc, y, 'El periodo se aplica solo a bodega. Cada saldo conserva la unidad de su insumo.')
@@ -595,10 +590,12 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   return doc.output('blob') as Blob
 }
 
+// Reconoce la cancelación de una operación para evitar mostrarla como fallo.
 function isAbortError(cause: unknown) {
   return cause instanceof DOMException && cause.name === 'AbortError'
 }
 
+// RF-TR-03: inicia la descarga en el navegador de un PDF ya generado.
 export async function saveReportPdf(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

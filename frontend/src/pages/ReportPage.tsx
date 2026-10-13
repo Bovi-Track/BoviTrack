@@ -3,16 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { WeeklyReportCard } from '../components/dashboard/WeeklyReportCard.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useFarm } from '../context/useFarm.ts'
+import { useAuth } from '../auth/useAuth.ts'
 import { Field, fieldClass } from '../components/dashboard/Modal.tsx'
 import { loadInventoryReport, validateInventoryPeriod } from '../lib/inventory.ts'
-import {
-  loadBovines,
-  loadTreatments,
-  loadWeighings,
-  todayIso,
-} from '../lib/dashboard.ts'
+import { loadBovines } from '../lib/bovines.ts'
+import { loadTreatments } from '../lib/sanitary.ts'
+import { loadWeighings } from '../lib/weighings.ts'
+import { todayIso } from '../lib/dates.ts'
 import { buildWeeklyReport } from '../lib/gmd.ts'
 import {
   REPORT_SECTIONS,
@@ -27,6 +25,7 @@ import {
 } from '../lib/report.ts'
 import type { Bovine, Farm, Treatment, Weighing } from '../types/dashboard.ts'
 
+// RF-TR-03 (parcial): presenta los reportes de la finca con acceso administrativo a bodega.
 export default function ReportPage() {
   const { activeFarm, rolesByFarm, loading, loadedUserId } = useFarm()
   const { user, loading: authLoading } = useAuth()
@@ -36,6 +35,7 @@ export default function ReportPage() {
     canInventory={Boolean(user && activeFarm && rolesByFarm[activeFarm.id] === 'admin')} />
 }
 
+// RF-TR-03 (parcial): coordina selección de secciones, periodo de bodega y descarga.
 function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; canInventory: boolean }) {
   const [selection, setSelection] = useState<ReportSelection>(defaultReportSelection)
   const [desde, setDesde] = useState(() => `${todayIso().slice(0, 7)}-01`)
@@ -68,6 +68,7 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
     if (!farmId) return
     const capturedFarmId = farmId
     let active = true
+    // Carga hato, pesajes y próximas aplicaciones para las secciones existentes del PDF.
     async function load() {
       try {
         const nextBovines = await loadBovines(capturedFarmId)
@@ -112,10 +113,12 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
     }
   }, [activeFarm, bovines, treatments, weighings])
 
+  // Activa o desactiva una sección de la selección del reporte.
   function toggle(id: keyof ReportSelection) {
     setSelection((current) => ({ ...current, [id]: !current[id] }))
   }
 
+  // RF-TR-03 (parcial): consulta bodega por periodo y genera el PDF con la selección capturada.
   async function generate() {
     if (generating.current) return
     if (!reportData) {

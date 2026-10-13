@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
-import { roleLabel } from '../lib/dashboard.ts'
+import { useAuth } from '../auth/useAuth.ts'
+import { useFarm } from '../context/useFarm.ts'
+import { roleLabel } from '../lib/farms.ts'
 import { supabase } from '../lib/supabase.ts'
 
+// RF-UC14-01: presenta la identidad, rol de finca y acción de cierre de sesión.
 export default function SettingsPage() {
   const { user } = useAuth()
   const { activeFarm, role } = useFarm()
@@ -13,6 +14,7 @@ export default function SettingsPage() {
       ? user.user_metadata.nombre_completo
       : user?.email
 
+  // RF-UC14-01 (parcial): cierra la sesión; la limpieza de datos offline sigue pendiente.
   async function onLogout() {
     await supabase.auth.signOut()
     navigate('/iniciar-sesion', { replace: true })

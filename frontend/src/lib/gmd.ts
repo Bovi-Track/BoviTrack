@@ -1,12 +1,5 @@
+import { addDays, daysBetween, parseIsoDate, todayIso, toIsoDate } from './dates.ts'
 import type { Bovine, Weighing } from '../types/dashboard.ts'
-
-function todayIso() {
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 /** GMD esperada de engorde, en kg/día. */
 export const EXPECTED_GMD_KG = 0.8
@@ -48,34 +41,12 @@ export type WeeklyReport = {
   bulls: WeeklyReportBull[]
 }
 
-function parseIsoDate(iso: string) {
-  const [year, month, day] = iso.split('-').map(Number)
-  return new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1)
-}
-
-function toIsoDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-export function daysBetween(fromIso: string, toIso: string) {
-  const from = parseIsoDate(fromIso)
-  const to = parseIsoDate(toIso)
-  return Math.round((to.getTime() - from.getTime()) / 86_400_000)
-}
-
-function addDays(iso: string, days: number) {
-  const date = parseIsoDate(iso)
-  date.setDate(date.getDate() + days)
-  return toIsoDate(date)
-}
-
+// Comprueba si una fecha de calendario corresponde a un sábado.
 function isSaturday(iso: string) {
   return parseIsoDate(iso).getDay() === 6
 }
 
+// Encuentra el sábado de referencia sin superar la fecha recibida.
 function lastSaturdayOnOrBefore(iso: string) {
   const date = parseIsoDate(iso)
   const back = date.getDay() === 6 ? 0 : (date.getDay() + 1) % 7
@@ -83,16 +54,19 @@ function lastSaturdayOnOrBefore(iso: string) {
   return toIsoDate(date)
 }
 
+// Ordena una copia de los pesajes por fecha, sin modificar el historial recibido.
 function sortedWeighings(list: Weighing[]) {
   return [...list].sort((a, b) => a.fecha_pesaje.localeCompare(b.fecha_pesaje))
 }
 
+// Calcula kg/día entre dos pesajes o devuelve null si no hay días transcurridos.
 function gmdFromPair(first: Weighing, last: Weighing) {
   const days = daysBetween(first.fecha_pesaje, last.fecha_pesaje)
   if (days <= 0) return null
   return (last.peso_kg - first.peso_kg) / days
 }
 
+// Selecciona los dos sábados disponibles o los últimos dos pesajes anteriores al corte.
 function weeklyPair(list: Weighing[], endDate?: string) {
   const sorted = sortedWeighings(list)
   const cutoff = endDate ? weighingsOnOrBefore(sorted, endDate) : sorted
@@ -102,28 +76,31 @@ function weeklyPair(list: Weighing[], endDate?: string) {
   return { first: source[source.length - 2], last: source[source.length - 1] }
 }
 
+// Filtra y ordena los pesajes que no superan la fecha de corte.
 function weighingsOnOrBefore(list: Weighing[], date: string) {
   return list.filter((item) => item.fecha_pesaje <= date)
 }
 
+// Filtra los pesajes realizados un sábado conservando su orden.
 function saturdayWeighings(list: Weighing[]) {
   return list.filter((item) => isSaturday(item.fecha_pesaje))
 }
 
-/** GMD semanal: últimos dos sábados; si no hay, últimos dos pesajes. */
+// RF-UC06-01: calcula GMD semanal con los dos sábados o los dos pesajes disponibles.
 export function weeklyGmd(list: Weighing[], endDate?: string) {
   const pair = weeklyPair(list, endDate)
   if (!pair) return null
   return gmdFromPair(pair.first, pair.last)
 }
 
-/** GMD del toro: (último peso − primer peso) / días entre esas fechas. */
+// RF-UC06-01: calcula GMD entre el primer y el último pesaje válido.
 export function lifetimeGmd(list: Weighing[]) {
   const sorted = sortedWeighings(list)
   if (sorted.length < 2) return null
   return gmdFromPair(sorted[0], sorted[sorted.length - 1])
 }
 
+// RF-UC06-01: reúne la GMD total/semanal y el último peso y fecha del toro.
 export function bovineGmd(list: Weighing[]): BovineGmd {
   const sorted = sortedWeighings(list)
   const latest = sorted[sorted.length - 1]
@@ -135,16 +112,19 @@ export function bovineGmd(list: Weighing[]): BovineGmd {
   }
 }
 
+// Calcula el promedio de valores disponibles; devuelve null para una lista vacía.
 function mean(values: number[]) {
   if (values.length === 0) return null
   return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
+// Compara dos valores en porcentaje y evita dividir por cero o datos ausentes.
 function pctChange(current: number | null, previous: number | null) {
   if (current == null || previous == null || previous === 0) return null
   return ((current - previous) / Math.abs(previous)) * 100
 }
 
+// Agrupa y ordena el historial de pesajes de cada toro.
 function weighingsByBovine(weighings: Weighing[]) {
   const map = new Map<string, Weighing[]>()
   for (const weigh of weighings) {
@@ -158,11 +138,13 @@ function weighingsByBovine(weighings: Weighing[]) {
   return map
 }
 
+// Obtiene el último peso disponible hasta una fecha de corte.
 function lastWeightOnOrBefore(list: Weighing[], date: string) {
   const match = [...list].reverse().find((item) => item.fecha_pesaje <= date)
   return match?.peso_kg ?? null
 }
 
+// Reúne los pesos conocidos del hato activo para una fecha de comparación.
 function snapshotOnOrBefore(
   active: Bovine[],
   byBovine: Map<string, Weighing[]>,
@@ -176,6 +158,7 @@ function snapshotOnOrBefore(
   return weights
 }
 
+// Reúne el último peso disponible de cada toro activo.
 function latestWeights(active: Bovine[], byBovine: Map<string, Weighing[]>) {
   const weights: number[] = []
   for (const bovine of active) {
@@ -186,6 +169,7 @@ function latestWeights(active: Bovine[], byBovine: Map<string, Weighing[]>) {
   return weights
 }
 
+// Calcula las GMD semanales disponibles del hato hasta una fecha de corte.
 function weeklyGmdsAt(
   active: Bovine[],
   byBovine: Map<string, Weighing[]>,
@@ -199,6 +183,7 @@ function weeklyGmdsAt(
   return values
 }
 
+// Elige los sábados de referencia a partir del historial o la fecha local actual.
 function referenceSaturdays(weighings: Weighing[]) {
   const saturdays = [
     ...new Set(
@@ -214,6 +199,7 @@ function referenceSaturdays(weighings: Weighing[]) {
   return { thisSaturday, prevSaturday }
 }
 
+// RF-UC06-01 y RF-TR-03 (parcial): construye los datos del reporte semanal del hato.
 export function buildWeeklyReport(
   bovines: Bovine[],
   weighings: Weighing[],
@@ -313,17 +299,20 @@ export function buildWeeklyReport(
   }
 }
 
+// Formatea un peso con decimales y unidad, o un indicador de dato ausente.
 export function formatKg(value: number | null, digits = 2) {
   if (value == null) return '—'
   return `${value.toFixed(digits)} kg`
 }
 
+// Formatea una variación numérica mostrando el signo positivo cuando corresponde.
 export function formatSigned(value: number | null, digits = 1) {
   if (value == null) return '—'
   const prefix = value > 0 ? '+' : ''
   return `${prefix}${value.toFixed(digits)}`
 }
 
+// Prepara el texto y sentido de una variación porcentual para la interfaz y el PDF.
 export function formatPct(value: number | null) {
   if (value == null) return null
   const rounded = Math.round(value)

@@ -1,20 +1,9 @@
-﻿import { CheckCircle2, Loader2, LogIn, Tractor, UserPlus, XCircle } from 'lucide-react'
+import { clearPendingInvite, savePendingInvite } from '../lib/pending-invite.ts'
+import { CheckCircle2, Loader2, LogIn, Tractor, UserPlus, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider.tsx'
-import { acceptFarmInvitation } from '../lib/farm-manage.ts'
-
-const PENDING_INVITE_KEY = 'bovitrack-pending-invite'
-
-export function savePendingInvite(token: string) {
-  sessionStorage.setItem(PENDING_INVITE_KEY, token)
-}
-
-export function consumePendingInvite(): string | null {
-  const token = sessionStorage.getItem(PENDING_INVITE_KEY)
-  sessionStorage.removeItem(PENDING_INVITE_KEY)
-  return token
-}
+import { useAuth } from '../auth/useAuth.ts'
+import { acceptFarmInvitation } from '../lib/farms.ts'
 
 type State =
   | { status: 'loading' }
@@ -22,6 +11,7 @@ type State =
   | { status: 'error'; message: string }
   | { status: 'needs-auth'; token: string; farmName?: string }
 
+// RF-UC15-02: coordina autenticación y aceptación del enlace de invitación a una finca.
 export default function JoinFarmPage() {
   const [params] = useSearchParams()
   const token = params.get('token') ?? ''
@@ -50,6 +40,7 @@ export default function JoinFarmPage() {
     void (async () => {
       try {
         const farm = await acceptFarmInvitation(token)
+        clearPendingInvite(token)
         setState({ status: 'success', farmName: farm.nombre })
         setTimeout(() => navigate('/inicio', { replace: true }), 2500)
       } catch (err) {

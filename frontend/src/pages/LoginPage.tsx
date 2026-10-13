@@ -1,11 +1,12 @@
 import { Lock, User } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
 import { iniciarSesion, mensajeAuth } from '../lib/auth.ts'
 
+// RF-UC14-01: presenta el acceso por correo o usuario con preferencia Recordarme.
 export default function LoginPage() {
   const { user, loading, passwordRecovery } = useAuth()
   const navigate = useNavigate()
@@ -19,6 +20,7 @@ export default function LoginPage() {
     return <Navigate to="/inicio" replace />
   }
 
+  // RF-UC14-01: inicia sesión y navega a Inicio después de confirmar el acceso.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
