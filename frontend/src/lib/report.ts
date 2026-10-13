@@ -10,6 +10,9 @@ import {
   type WeeklyReport,
 } from './gmd.ts'
 import type { Bovine, SaleHint, Treatment, Weighing } from '../types/dashboard.ts'
+import type { InventoryReport } from '../types/inventory.ts'
+import { movementLabels } from '../types/inventory.ts'
+import { parseInventoryReport } from './inventory.ts'
 
 export type ReportSectionId =
   | 'semanal'
@@ -71,6 +74,7 @@ export type ReportData = {
   bovines: Bovine[]
   weighings: Weighing[]
   treatments: Treatment[]
+  inventory?: InventoryReport
 }
 
 export type ReportSelection = Record<ReportSectionId, boolean>
@@ -419,6 +423,8 @@ export function buildWeeklyReportPdf(data: {
 }
 
 export function buildReportPdf(data: ReportData, selection: ReportSelection) {
+  if (selection.inventario && !data.inventory) throw new Error('Faltan los datos confirmados del inventario de bodega.')
+  const inventory = selection.inventario ? parseInventoryReport(data.inventory) : undefined
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const metrics = computeMetrics(data.bovines, data.weighings, data.treatments)
   const weekly = buildWeeklyReport(data.bovines, data.weighings)
@@ -516,12 +522,27 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
 
   if (selection.inventario) {
     y = addHeading(doc, y, 'Inventario de bodega')
-    y = addTable(
-      doc,
-      y,
-      ['Insumo', 'Categoría', 'Cantidad', 'Ubicación'],
-      [['Aún no hay movimientos de bodega registrados.', '', '', '']],
-    )
+    if (!inventory) throw new Error('Faltan los datos confirmados del inventario de bodega.')
+    const qty = (n: number) => n.toLocaleString('es-CR', { maximumFractionDigits: 2 })
+    y = addNote(doc, y, `${inventory.finca_nombre} · Del ${formatDate(inventory.desde)} al ${formatDate(inventory.hasta)} (inclusive).`)
+    y = addNote(doc, y, 'El periodo se aplica solo a bodega. Cada saldo conserva la unidad de su insumo.')
+    if (inventory.resumen.length === 0) {
+      y = addNote(doc, y, 'El catálogo de bodega está vacío para este periodo.')
+    } else {
+      y = addTable(doc, y, ['Insumo', 'Categoría / estado', 'Unidad', 'Inicial', 'Final'],
+        inventory.resumen.map((i) => [i.nombre, `${i.tipo} / ${i.activo ? 'Activo' : 'Inactivo'}`, i.unidad_medida, qty(i.saldo_inicial), qty(i.saldo_final)]))
+      y = addHeading(doc, y, 'Movimientos del periodo por insumo')
+      y = addTable(doc, y, ['Insumo', 'Unidad', 'Entradas', 'Salidas', 'Consumos', 'Ajustes +', 'Ajustes -'],
+        inventory.resumen.map((i) => [i.nombre, i.unidad_medida, qty(i.entradas), qty(i.salidas), qty(i.consumos), qty(i.ajustes_positivos), qty(i.ajustes_negativos)]))
+    }
+    y = addHeading(doc, y, 'Detalle de movimientos de bodega')
+    if (inventory.movimientos.length === 0) {
+      y = addNote(doc, y, 'No hay movimientos registrados dentro del periodo seleccionado.')
+    } else {
+      y = addTable(doc, y, ['Fecha', 'Insumo / tipo', 'Cantidad / unidad', 'Responsable / observaciones'],
+        inventory.movimientos.map((m) => [formatDate(m.fecha_movimiento), `${m.insumo_nombre}\n${movementLabels[m.tipo]}`,
+          `${qty(m.cantidad)} ${m.unidad_medida}`, `${m.responsable_nombre || 'Responsable no disponible'}\n${m.observaciones || ''}`]))
+    }
   }
 
   if (selection.tratamientos) {
@@ -545,7 +566,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
 
   if (selection.venta) {
     y = addHeading(doc, y, 'Evaluación de venta')
-    y = addTable(
+    addTable(
       doc,
       y,
       ['Bovino', 'Recomendación', 'Detalle'],

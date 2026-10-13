@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -23,6 +24,7 @@ type FarmContextValue = {
   activeFarm: Farm | null
   role: FarmRole
   loading: boolean
+  loadedUserId: string | null
   setActiveFarmId: (id: string) => void
   createAndSelectFarm: (nombre: string, ubicacion: string) => Promise<Farm>
   updateActiveFarm: (patch: Partial<Pick<Farm, 'nombre' | 'ubicacion' | 'activo'>>) => Promise<Farm>
@@ -39,10 +41,15 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     getStoredFarmId(),
   )
   const [loading, setLoading] = useState(true)
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null)
+  const refreshRequest = useRef(0)
 
   const refreshFarms = useCallback(async () => {
+    const request = ++refreshRequest.current
     if (!user) {
       setFarms([])
+      setRolesByFarm({})
+      setLoadedUserId(null)
       setLoading(false)
       return
     }
@@ -50,12 +57,14 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     try {
       const rows = await loadUserFarms(user.id)
+      if (request !== refreshRequest.current) return
       const nextFarms = rows.map((row) => row.farm)
       const nextRoles = Object.fromEntries(
         rows.map((row) => [row.farm.id, row.role]),
       )
       setFarms(nextFarms)
       setRolesByFarm(nextRoles)
+      setLoadedUserId(user.id)
 
       setActiveFarmIdState((current) => {
         const stored = current ?? getStoredFarmId()
@@ -67,7 +76,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         return next
       })
     } finally {
-      setLoading(false)
+      if (request === refreshRequest.current) setLoading(false)
     }
   }, [user])
 
@@ -89,10 +98,11 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         return [farm, ...current]
       })
       setRolesByFarm((current) => ({ ...current, [farm.id]: 'admin' }))
+      setLoadedUserId(user?.id ?? null)
       setActiveFarmIdState(farm.id)
       return farm
     },
-    [],
+    [user?.id],
   )
 
   // Para actualizar lo que es los datos de la finca, nombre, ubicacion, o estado
@@ -124,6 +134,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       activeFarm,
       role,
       loading,
+      loadedUserId,
       setActiveFarmId,
       createAndSelectFarm,
       updateActiveFarm,
@@ -135,6 +146,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       activeFarm,
       role,
       loading,
+      loadedUserId,
       setActiveFarmId,
       createAndSelectFarm,
       updateActiveFarm,

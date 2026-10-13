@@ -5,7 +5,7 @@ export type Farm = {
   activo: boolean
 }
 
-export type FarmRole = 'admin' | 'campo'
+export type FarmRole = 'admin' | 'campo' | 'unknown'
 
 export type FarmMember = {
   userId: string

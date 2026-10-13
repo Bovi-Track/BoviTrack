@@ -50,11 +50,15 @@ export function greetingForNow(name: string) {
 }
 
 export function roleLabel(role: FarmRole) {
+  if (role === 'unknown') return 'Rol no reconocido'
   return role === 'admin' ? 'Administrador de Finca' : 'Personal de Campo'
 }
 
 export function mapRole(name: string | null | undefined): FarmRole {
-  return name?.trim().toUpperCase() === 'ADMINISTRADOR' ? 'admin' : 'campo'
+  const normalized = name?.trim().toUpperCase()
+  if (normalized === 'ADMINISTRADOR' || normalized === 'ADMINISTRADOR DE FINCA') return 'admin'
+  if (normalized === 'PERSONAL_CAMPO' || normalized === 'PERSONAL DE CAMPO') return 'campo'
+  return 'unknown'
 }
 
 export function getStoredFarmId() {
