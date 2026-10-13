@@ -852,7 +852,7 @@ function MembersSection({
 function RoleBadge({
   role,
 }: {
-  role: 'admin' | 'campo'
+  role: FarmMember['role']
 }) {
   const isAdmin = role === 'admin'
   return (

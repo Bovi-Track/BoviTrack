@@ -1,13 +1,17 @@
 import { FileText, Save } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { WeeklyReportCard } from '../components/dashboard/WeeklyReportCard.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
+import { useAuth } from '../auth/AuthProvider.tsx'
+import { Field, fieldClass } from '../components/dashboard/Modal.tsx'
+import { loadInventoryReport, validateInventoryPeriod } from '../lib/inventory.ts'
 import {
   loadBovines,
   loadTreatments,
   loadWeighings,
+  todayIso,
 } from '../lib/dashboard.ts'
 import { buildWeeklyReport } from '../lib/gmd.ts'
 import {
@@ -21,20 +25,38 @@ import {
   type ReportData,
   type ReportSelection,
 } from '../lib/report.ts'
-import type { Bovine, Treatment, Weighing } from '../types/dashboard.ts'
+import type { Bovine, Farm, Treatment, Weighing } from '../types/dashboard.ts'
 
 export default function ReportPage() {
-  const { activeFarm, loading } = useFarm()
+  const { activeFarm, rolesByFarm, loading, loadedUserId } = useFarm()
+  const { user, loading: authLoading } = useAuth()
+  if (loading || authLoading) return <p className="px-4 pt-10 text-sm text-stone-500">Cargando…</p>
+  if (user && loadedUserId !== user.id) return <p role="alert" className="px-4 pt-10 text-sm text-red-700">No se pudo verificar tu acceso a las fincas. <button type="button" className="underline" onClick={() => window.location.reload()}>Reintentar</button></p>
+  return <FarmReport key={`${user?.id ?? ''}:${activeFarm?.id ?? ''}`} activeFarm={activeFarm}
+    canInventory={Boolean(user && activeFarm && rolesByFarm[activeFarm.id] === 'admin')} />
+}
+
+function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; canInventory: boolean }) {
   const [selection, setSelection] = useState<ReportSelection>(defaultReportSelection)
+  const [desde, setDesde] = useState(() => `${todayIso().slice(0, 7)}-01`)
+  const [hasta, setHasta] = useState(todayIso)
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [weighings, setWeighings] = useState<Weighing[]>([])
   const [treatments, setTreatments] = useState<Treatment[]>([])
-  const [loadingData, setLoadingData] = useState(false)
+  const [loadingData, setLoadingData] = useState(Boolean(activeFarm))
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{
     message: string
     tone: 'ok' | 'warn' | 'error'
   } | null>(null)
+  const live = useRef(false)
+  const generating = useRef(false)
+  const farmId = activeFarm?.id
+
+  useEffect(() => {
+    live.current = true
+    return () => { live.current = false }
+  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -43,18 +65,12 @@ export default function ReportPage() {
   }, [toast])
 
   useEffect(() => {
-    if (!activeFarm) {
-      setBovines([])
-      setWeighings([])
-      setTreatments([])
-      return
-    }
-    const farmId = activeFarm.id
+    if (!farmId) return
+    const capturedFarmId = farmId
     let active = true
-    setLoadingData(true)
     async function load() {
       try {
-        const nextBovines = await loadBovines(farmId)
+        const nextBovines = await loadBovines(capturedFarmId)
         const ids = nextBovines.map((item) => item.id)
         const [nextWeighings, nextTreatments] = await Promise.all([
           loadWeighings(ids),
@@ -79,9 +95,10 @@ export default function ReportPage() {
     return () => {
       active = false
     }
-  }, [activeFarm])
+  }, [farmId])
 
-  const selectedCount = selectedSectionCount(selection)
+  const effectiveSelection = { ...selection, inventario: canInventory && selection.inventario }
+  const selectedCount = selectedSectionCount(effectiveSelection)
 
   const reportData = useMemo<ReportData | null>(() => {
     if (!activeFarm) return null
@@ -100,6 +117,7 @@ export default function ReportPage() {
   }
 
   async function generate() {
+    if (generating.current) return
     if (!reportData) {
       setToast({ message: 'Selecciona una finca activa desde Inicio.', tone: 'warn' })
       return
@@ -111,19 +129,29 @@ export default function ReportPage() {
       })
       return
     }
+    const capturedSelection = { ...effectiveSelection }
+    const capturedFarmId = activeFarm?.id
+    generating.current = true
     setSaving(true)
     try {
-      const blob = buildReportPdf(reportData, selection)
+      if (capturedSelection.inventario) validateInventoryPeriod(desde, hasta)
+      const inventory = capturedSelection.inventario && capturedFarmId
+        ? await loadInventoryReport(capturedFarmId, desde, hasta) : undefined
+      if (!live.current) return
+      const currentData = { ...reportData, generatedAt: new Date().toISOString(), inventory }
+      const blob = buildReportPdf(currentData, capturedSelection)
       const filename = suggestedReportFilename(
         reportData.farmName,
-        reportData.generatedAt,
+        currentData.generatedAt,
       )
       await saveReportPdf(blob, filename)
+      if (!live.current) return
       setToast({
         message: 'Elige la carpeta y guarda el PDF.',
         tone: 'ok',
       })
     } catch (cause) {
+      if (!live.current) return
       if (isAbortError(cause)) return
       setToast({
         message:
@@ -133,12 +161,9 @@ export default function ReportPage() {
         tone: 'error',
       })
     } finally {
-      setSaving(false)
+      generating.current = false
+      if (live.current) setSaving(false)
     }
-  }
-
-  if (loading) {
-    return <p className="mx-auto max-w-3xl px-4 pt-10 text-sm text-stone-500">Cargando…</p>
   }
 
   return (
@@ -180,13 +205,14 @@ export default function ReportPage() {
 
         <ul className="space-y-2">
           {REPORT_SECTIONS.map((section) => {
-            const checked = selection[section.id]
+            const checked = effectiveSelection[section.id]
             return (
               <li key={section.id}>
                 <label className="flex min-h-14 cursor-pointer items-start gap-3 rounded-2xl bg-cream px-3 py-3">
                   <input
                     type="checkbox"
                     checked={checked}
+                    disabled={saving || (section.id === 'inventario' && !canInventory)}
                     onChange={() => toggle(section.id)}
                     className="mt-1 size-5 accent-bovi"
                   />
@@ -195,7 +221,7 @@ export default function ReportPage() {
                       {section.label}
                     </span>
                     <span className="text-xs text-stone-500">
-                      {section.description}
+                      {section.id === 'inventario' && !canInventory ? 'Disponible para administradores de la finca.' : section.description}
                     </span>
                   </span>
                 </label>
@@ -203,6 +229,15 @@ export default function ReportPage() {
             )
           })}
         </ul>
+
+        {effectiveSelection.inventario ? <div className="mt-4 space-y-3 rounded-2xl bg-cream p-4">
+          <p className="text-sm font-medium text-stone-800">Periodo del inventario de bodega</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field id="inventory-desde" label="Desde"><input id="inventory-desde" type="date" required disabled={saving} value={desde} onChange={(e) => setDesde(e.target.value)} className={fieldClass} /></Field>
+            <Field id="inventory-hasta" label="Hasta"><input id="inventory-hasta" type="date" required disabled={saving} value={hasta} onChange={(e) => setHasta(e.target.value)} className={fieldClass} /></Field>
+          </div>
+          <p className="text-xs text-stone-500">Ambas fechas se incluyen. Este periodo solo se aplica a bodega; las demás secciones conservan sus datos habituales.</p>
+        </div> : null}
 
         <button
           type="button"
@@ -231,7 +266,7 @@ export default function ReportPage() {
           </p>
         ) : (
           <ul className="space-y-2 text-sm text-stone-600">
-            {REPORT_SECTIONS.filter((section) => selection[section.id]).map(
+            {REPORT_SECTIONS.filter((section) => effectiveSelection[section.id]).map(
               (section) => (
                 <li key={section.id} className="rounded-xl bg-cream px-3 py-2">
                   {section.label}

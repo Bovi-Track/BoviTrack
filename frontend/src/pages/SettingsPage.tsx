@@ -1,5 +1,4 @@
-import { FileText } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider.tsx'
 import { useFarm } from '../context/FarmContext.tsx'
 import { roleLabel } from '../lib/dashboard.ts'
