@@ -4,6 +4,8 @@ Actualizada: 2026-10-12. Los porcentajes son estimaciones; 100 % significa que e
 
 Cada tarea debe indicar qué requisito atiende. Al completarla, actualizar su avance y lo que falta, sin ampliar el alcance del requisito.
 
+Las funciones de entrada indican sus requisitos en comentarios; los helpers describen su operación. Las implementaciones parciales y desviaciones se señalan explícitamente.
+
 | ID | Requisito funcional | Avance | Qué falta |
 |---|---|---:|---|
 | RF-UC01-01 | Registrar compras: subasta/proveedor, factura, fecha, peso, precio/kg, transporte y toros adquiridos. | 85 % | Unificar el rol administrador en compras y verificar en Supabase la compra completa, el pesaje inicial, la asignación y la reversión ante errores. |

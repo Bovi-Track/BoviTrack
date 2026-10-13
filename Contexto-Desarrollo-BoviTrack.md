@@ -57,7 +57,7 @@ El catálogo, movimientos e historial de inventario están implementados. Su SQL
 
 La evaluación económica completa de venta, el registro de ventas/bajas y la trazabilidad unificada todavía requieren desarrollo. El periodo de bodega no filtra las otras secciones del PDF.
 
-El siguiente ordenamiento acordado es identificar en el código dónde vive cada requisito, estandarizar sesión y permisos, y completar la capa offline. Es trabajo pendiente; actualizar documentos no implementa esos cambios.
+La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La estandarización completa de sesión/permisos y la capa offline siguen pendientes.
 
 ## 5. Operación offline prevista
 
