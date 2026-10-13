@@ -1,34 +1,36 @@
+import { HistoryItem } from '../components/bovines/SanitaryHistoryItem.tsx'
 import {
-  Beef,
-  Bug,
-  ChevronLeft,
-  ChevronRight,
-  Pencil,
-  Pill,
-  Plus,
-  Search,
-  Stethoscope,
-  Syringe,
-  Trash2,
-  type LucideIcon,
-} from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
-import { Toast } from '../components/dashboard/Toast.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
-import {
+  bovineStatusLabel,
   bovineErrorMessage,
   bovineLabel,
   createBovines,
   loadBovines,
-  loadWeighings,
-  todayIso,
   updateBovine,
+} from '../lib/bovines.ts'
+import { BullSanitaryDetail } from '../components/bovines/BovineDetail.tsx'
+import {
+  kinds,
+  kindById,
+  planStatusLabel,
+  planStatusClass,
+} from '../components/bovines/sanitary-options.ts'
+import {
+  latestOf,
+  planStatus,
+  worstStatus,
   loadSanitaryRecords,
   createSanitaryRecord,
-  removeSanitaryRecord
-} from '../lib/dashboard.ts'
-import { bovineGmd } from '../lib/gmd.ts'
+  removeSanitaryRecord,
+} from '../lib/sanitary.ts'
+import { SegmentButton } from '../components/dashboard/SegmentButton.tsx'
+import { formatDayLong as formatIso, todayIso } from '../lib/dates.ts'
+import type { SanitaryKind, SanitaryRecord } from '../types/sanitary.ts'
+import { Beef, ChevronRight, Plus, Search, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
+import { Toast } from '../components/dashboard/Toast.tsx'
+import { useFarm } from '../context/useFarm.ts'
+import { loadWeighings } from '../lib/weighings.ts'
 import type { Bovine, BovineStatus, Weighing } from '../types/dashboard.ts'
 
 type BullDraft = {
@@ -53,6 +55,7 @@ type EditForm = {
   estado: BovineStatus
 }
 
+// Inicializa un toro del formulario múltiple con identificador local y fecha de ingreso.
 function newDraft(): BullDraft {
   return {
     localId: crypto.randomUUID(),
@@ -67,6 +70,7 @@ function newDraft(): BullDraft {
   }
 }
 
+// Convierte la ficha persistida del toro en valores editables del formulario.
 function editFrom(bovine: Bovine): EditForm {
   return {
     identificador_interno: bovine.identificador_interno,
@@ -77,102 +81,7 @@ function editFrom(bovine: Bovine): EditForm {
   }
 }
 
-const statusLabel: Record<Bovine['estado'], string> = {
-  ACTIVO: 'Activo',
-  INACTIVO: 'Inactivo',
-  VENDIDO: 'Vendido',
-  BAJA: 'Baja',
-  MUERTO: 'Muerto',
-}
-
-type SanitaryKind =
-  | 'VACUNACION'
-  | 'DESPARASITACION'
-  | 'VITAMINIZACION'
-  | 'TRATAMIENTO'
-
-type PlanStatus = 'vacio' | 'vencido' | 'proximo' | 'aldia' | 'sin_proxima'
-
-type SanitaryRecord = {
-  id: string
-  bovino_id: string
-  tipo: SanitaryKind
-  producto: string
-  dosis: string
-  fecha: string
-  proxima: string
-  responsable: string
-  observaciones: string
-}
-
-const kinds: {
-  id: SanitaryKind
-  label: string
-  short: string
-  icon: LucideIcon
-  chip: string
-  bar: string
-  placeholder: string
-}[] = [
-    {
-      id: 'VACUNACION',
-      label: 'Vacunación',
-      short: 'Vacuna',
-      icon: Syringe,
-      chip: 'bg-emerald-100 text-emerald-800',
-      bar: 'bg-emerald-600',
-      placeholder: 'Clostridial, aftosa, rabia…',
-    },
-    {
-      id: 'DESPARASITACION',
-      label: 'Desparasitación',
-      short: 'Desparasitar',
-      icon: Bug,
-      chip: 'bg-amber-100 text-amber-900',
-      bar: 'bg-amber-500',
-      placeholder: 'Ivermectina, albendazol…',
-    },
-    {
-      id: 'VITAMINIZACION',
-      label: 'Vitaminización',
-      short: 'Vitaminas',
-      icon: Pill,
-      chip: 'bg-sky-100 text-sky-900',
-      bar: 'bg-sky-600',
-      placeholder: 'Complejo B, ADE…',
-    },
-    {
-      id: 'TRATAMIENTO',
-      label: 'Tratamiento médico',
-      short: 'Tratamiento',
-      icon: Stethoscope,
-      chip: 'bg-rose-100 text-rose-800',
-      bar: 'bg-rose-600',
-      placeholder: 'Antibiótico, antiinflamatorio…',
-    },
-  ]
-
-const kindById = Object.fromEntries(kinds.map((item) => [item.id, item])) as Record<
-  SanitaryKind,
-  (typeof kinds)[number]
->
-
-const planStatusLabel: Record<PlanStatus, string> = {
-  vacio: 'Sin registro',
-  vencido: 'Vencido',
-  proximo: 'Próximo',
-  aldia: 'Al día',
-  sin_proxima: 'Aplicado',
-}
-
-const planStatusClass: Record<PlanStatus, string> = {
-  vacio: 'bg-stone-100 text-stone-600',
-  vencido: 'bg-red-100 text-red-800',
-  proximo: 'bg-amber-100 text-amber-900',
-  aldia: 'bg-bovi/10 text-bovi',
-  sin_proxima: 'bg-stone-100 text-stone-700',
-}
-
+// Inicializa el formulario sanitario con toro, tipo de aplicación y fecha local.
 function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
   return {
     bovino_id: bovinoId,
@@ -186,49 +95,7 @@ function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
   }
 }
 
-function formatIso(iso: string) {
-  if (!iso) return ''
-  const [year, month, day] = iso.split('-').map(Number)
-  if (!year || !month || !day) return iso
-  return new Date(year, month - 1, day).toLocaleDateString('es-CR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
-function addDays(iso: string, days: number) {
-  const [year, month, day] = iso.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  date.setDate(date.getDate() + days)
-  const nextMonth = String(date.getMonth() + 1).padStart(2, '0')
-  const nextDay = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${nextMonth}-${nextDay}`
-}
-
-function latestOf(records: SanitaryRecord[], tipo: SanitaryKind) {
-  return records
-    .filter((item) => item.tipo === tipo)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha))[0]
-}
-
-function planStatus(record: SanitaryRecord | undefined): PlanStatus {
-  if (!record) return 'vacio'
-  if (!record.proxima) return 'sin_proxima'
-  const today = todayIso()
-  if (record.proxima < today) return 'vencido'
-  if (record.proxima <= addDays(today, 14)) return 'proximo'
-  return 'aldia'
-}
-
-function worstStatus(records: SanitaryRecord[]): PlanStatus {
-  const statuses = kinds.map((kind) => planStatus(latestOf(records, kind.id)))
-  if (statuses.includes('vencido')) return 'vencido'
-  if (statuses.includes('proximo')) return 'proximo'
-  if (statuses.includes('aldia') || statuses.includes('sin_proxima')) return 'aldia'
-  return 'vacio'
-}
-
+// RF-UC04-01, RF-UC07-01 y RF-UC07-02: coordina altas, ficha y plan sanitario del hato.
 export default function BullsPage() {
   const { activeFarm, loading } = useFarm()
   const [bovines, setBovines] = useState<Bovine[]>([])
@@ -278,6 +145,7 @@ export default function BullsPage() {
     }
     const farmId = activeFarm.id
     let active = true
+    // Carga toros, pesajes y sanidad para la finca actual y descarta respuestas antiguas.
     async function load() {
       try {
         const rows = await loadBovines(farmId)
@@ -332,6 +200,7 @@ export default function BullsPage() {
     })
   }, [bovines, kindFilter, query, records])
 
+  // Actualiza un campo del toro indicado dentro del formulario múltiple.
   function updateDraft(localId: string, key: DraftField, value: string) {
     setDrafts((current) =>
       current.map((draft) =>
@@ -340,16 +209,19 @@ export default function BullsPage() {
     )
   }
 
+  // Actualiza un campo del formulario de aplicación sanitaria.
   function updatePlan(key: keyof ReturnType<typeof emptyPlan>, value: string) {
     setPlanForm((current) => ({ ...current, [key]: value }))
   }
 
+  // Inicializa y abre el formulario de alta múltiple de toros.
   function openAdd() {
     setDrafts([newDraft()])
     setAddError('')
     setOpen(true)
   }
 
+  // Carga la ficha del toro seleccionado en el formulario de edición.
   function openEdit() {
     if (!selected) return
     setEditForm(editFrom(selected))
@@ -357,6 +229,7 @@ export default function BullsPage() {
     setEditOpen(true)
   }
 
+  // RF-UC04-01: valida y persiste el alta múltiple de toros en la finca seleccionada.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!activeFarm) {
@@ -406,6 +279,7 @@ export default function BullsPage() {
     }
   }
 
+  // RF-UC04-01 (parcial): guarda la ficha; las transiciones de UC-12/13 siguen pendientes.
   async function onSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selected) return
@@ -436,11 +310,13 @@ export default function BullsPage() {
     }
   }
 
+  // Inicializa el formulario sanitario para el toro y tipo seleccionados.
   function openPlan(bovinoId: string, tipo: SanitaryKind = 'VACUNACION') {
     setPlanForm(emptyPlan(bovinoId, tipo))
     setPlanOpen(true)
   }
 
+  // RF-UC07-01: valida dosis, solicita la aplicación y recarga el historial sanitario.
   async function onSubmitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!planForm.bovino_id) return
@@ -478,7 +354,7 @@ export default function BullsPage() {
         message: 'Registro sanitario guardado.',
         tone: 'ok',
       })
-    } catch (err) {
+    } catch {
       setToast({
         message: 'No se pudo guardar el registro sanitario.',
         tone: 'error',
@@ -486,12 +362,13 @@ export default function BullsPage() {
     }
   }
 
+  // RF-UC07-01 (desviación pendiente): ejecuta la eliminación sanitaria heredada.
   async function removeRecord(id: string) {
     try {
       await removeSanitaryRecord(id)
       setRecords((current) => current.filter((item) => item.id !== id))
       setToast({ message: 'Registro eliminado.', tone: 'ok' })
-    } catch (err) {
+    } catch {
       setToast({ message: 'No se pudo eliminar el registro.', tone: 'error' })
     }
   }
@@ -647,7 +524,7 @@ export default function BullsPage() {
                               : 'bg-stone-100 text-stone-600'
                               }`}
                           >
-                            {statusLabel[item.estado]}
+                            {bovineStatusLabel(item.estado)}
                           </span>
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-3 border-t border-stone-100 pt-3">
@@ -1081,356 +958,7 @@ export default function BullsPage() {
   )
 }
 
-function BullSanitaryDetail({
-  bovine,
-  weighings,
-  records,
-  kindFilter,
-  onKindFilter,
-  onBack,
-  onEdit,
-  onRegister,
-  onRemove,
-}: {
-  bovine: Bovine
-  weighings: Weighing[]
-  records: SanitaryRecord[]
-  kindFilter: SanitaryKind | 'TODOS'
-  onKindFilter: (value: SanitaryKind | 'TODOS') => void
-  onBack: () => void
-  onEdit: () => void
-  onRegister: (tipo: SanitaryKind) => void
-  onRemove: (id: string) => void
-}) {
-  const [fichaView, setFichaView] = useState<'sanidad' | 'peso'>('peso')
-  const history = [...records]
-    .filter((item) => kindFilter === 'TODOS' || item.tipo === kindFilter)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha))
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-4 inline-flex min-h-11 cursor-pointer items-center gap-1 text-sm font-medium text-stone-500 hover:text-bovi"
-      >
-        <ChevronLeft className="size-4" />
-        Volver al hato
-      </button>
-
-      <header className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-medium tracking-[0.18em] text-stone-400">
-            FICHA
-          </p>
-          <h1 className="mt-1 font-serif text-3xl font-semibold text-stone-900">
-            {bovineLabel(bovine)}
-          </h1>
-          <p className="mt-1 text-sm text-stone-500">
-            {bovine.numero_diio ? `DIIO ${bovine.numero_diio}` : 'Sin DIIO'}
-            {bovine.raza ? ` · ${bovine.raza}` : ''}
-            {bovine.color ? ` · ${bovine.color}` : ''}
-            {` · ${bovine.sexo === 'MACHO' ? 'Macho' : 'Hembra'}`}
-            {` · ${statusLabel[bovine.estado]}`}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-cream"
-        >
-          <Pencil className="size-4 text-bovi" />
-          Editar
-        </button>
-      </header>
-
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
-        <SegmentButton
-          active={fichaView === 'peso'}
-          onClick={() => setFichaView('peso')}
-          label="Pesajes"
-        />
-        <SegmentButton
-          active={fichaView === 'sanidad'}
-          onClick={() => setFichaView('sanidad')}
-          label="Sanidad"
-        />
-      </div>
-
-      {fichaView === 'peso' ? (
-        <WeightHistory weighings={weighings} />
-      ) : (
-        <>
-          <div className="mb-5 flex justify-end">
-            <button
-              type="button"
-              onClick={() => onRegister(kindFilter === 'TODOS' ? 'VACUNACION' : kindFilter)}
-              className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover"
-            >
-              <Plus className="size-4" />
-              Aplicar
-            </button>
-          </div>
-
-          <div className="mb-5 grid grid-cols-2 gap-2">
-            {kinds.map((kind) => {
-              const latest = latestOf(records, kind.id)
-              const status = planStatus(latest)
-              const Icon = kind.icon
-              const selectedKind = kindFilter === kind.id
-              return (
-                <button
-                  key={kind.id}
-                  type="button"
-                  onClick={() => onKindFilter(selectedKind ? 'TODOS' : kind.id)}
-                  className={`cursor-pointer rounded-2xl border bg-white p-3 text-left shadow-sm ${selectedKind ? 'border-bovi' : 'border-stone-200/80'
-                    }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`inline-flex rounded-full p-1.5 ${kind.chip}`}>
-                      <Icon className="size-3.5" />
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${planStatusClass[status]}`}
-                    >
-                      {planStatusLabel[status]}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm font-medium text-stone-900">{kind.short}</p>
-                  <p className="mt-0.5 text-xs text-stone-500">
-                    {latest
-                      ? `${latest.producto} · ${formatIso(latest.fecha)}`
-                      : 'Sin aplicaciones'}
-                  </p>
-                  {latest?.proxima ? (
-                    <p className="mt-1 text-xs font-medium text-stone-700">
-                      Próxima {formatIso(latest.proxima)}
-                    </p>
-                  ) : null}
-                </button>
-              )
-            })}
-          </div>
-
-          <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="font-serif text-xl font-semibold text-stone-900">
-                Historial
-              </h2>
-              {kindFilter !== 'TODOS' ? (
-                <button
-                  type="button"
-                  onClick={() => onKindFilter('TODOS')}
-                  className="cursor-pointer text-xs font-medium text-bovi"
-                >
-                  Ver todos
-                </button>
-              ) : null}
-            </div>
-            {history.length === 0 ? (
-              <p className="text-sm text-stone-500">
-                {kindFilter === 'TODOS'
-                  ? 'Todavía no hay aplicaciones. Usa Aplicar para registrar la primera.'
-                  : `No hay ${kindById[kindFilter].label.toLowerCase()} en esta sesión.`}
-              </p>
-            ) : (
-              <ol className="space-y-4">
-                {history.map((item) => (
-                  <HistoryItem key={item.id} item={item} onRemove={onRemove} />
-                ))}
-              </ol>
-            )}
-          </section>
-        </>
-      )}
-    </div>
-  )
-}
-
-function WeightHistory({ weighings }: { weighings: Weighing[] }) {
-  const sorted = [...weighings].sort((a, b) =>
-    a.fecha_pesaje.localeCompare(b.fecha_pesaje),
-  )
-  const latest = sorted[sorted.length - 1]
-  const first = sorted[0]
-  const gain =
-    first && latest && sorted.length > 1 ? latest.peso_kg - first.peso_kg : null
-  const gmd = bovineGmd(sorted)
-
-  return (
-    <div className="space-y-4">
-      <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="font-serif text-xl font-semibold text-stone-900">
-              Curva de peso
-            </h2>
-            <p className="mt-1 text-sm text-stone-500">
-              {latest
-                ? `Último: ${latest.peso_kg.toFixed(1)} kg · ${formatIso(latest.fecha_pesaje)}`
-                : 'Todavía no hay pesajes de este toro.'}
-            </p>
-          </div>
-          {gain != null ? (
-            <p className={`text-sm font-semibold ${gain >= 0 ? 'text-bovi' : 'text-red-700'}`}>
-              {gain >= 0 ? '+' : ''}
-              {gain.toFixed(1)} kg
-            </p>
-          ) : null}
-        </div>
-        <div className="mb-4 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-cream px-3 py-3">
-            <p className="text-[11px] text-stone-500">GMD</p>
-            <p className="font-serif text-xl font-semibold text-stone-900">
-              {gmd.lifetime == null ? '—' : `${gmd.lifetime.toFixed(2)} kg`}
-            </p>
-            <p className="text-[11px] text-stone-400">primer a último pesaje</p>
-          </div>
-          <div className="rounded-2xl bg-cream px-3 py-3">
-            <p className="text-[11px] text-stone-500">GMD semanal</p>
-            <p
-              className={`font-serif text-xl font-semibold ${
-                gmd.weekly == null
-                  ? 'text-stone-900'
-                  : gmd.weekly < 0
-                    ? 'text-red-700'
-                    : 'text-bovi'
-              }`}
-            >
-              {gmd.weekly == null ? '—' : `${gmd.weekly.toFixed(2)} kg`}
-            </p>
-            <p className="text-[11px] text-stone-400">sábados o últimos dos pesajes</p>
-          </div>
-        </div>
-        <WeightCurve points={sorted} />
-      </section>
-
-      <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 font-serif text-xl font-semibold text-stone-900">
-          Historial
-        </h2>
-        {sorted.length === 0 ? (
-          <p className="text-sm text-stone-500">
-            Registra pesajes en esta pantalla o con el pesaje rápido de Inicio.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {[...sorted].reverse().map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-cream px-3 py-3"
-              >
-                <span className="text-sm text-stone-600">
-                  {formatIso(item.fecha_pesaje)}
-                </span>
-                <span className="font-serif text-xl font-semibold text-stone-900">
-                  {item.peso_kg.toFixed(1)}
-                  <span className="ml-1 font-sans text-xs font-medium text-stone-400">
-                    kg
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function WeightCurve({ points }: { points: Weighing[] }) {
-  if (points.length === 0) {
-    return (
-      <div className="flex h-36 items-center justify-center rounded-2xl bg-cream text-sm text-stone-400">
-        Sin datos para graficar
-      </div>
-    )
-  }
-
-  if (points.length === 1) {
-    return (
-      <div className="flex h-36 flex-col items-center justify-center rounded-2xl bg-cream">
-        <p className="font-serif text-3xl font-semibold text-stone-900">
-          {points[0].peso_kg.toFixed(1)} kg
-        </p>
-        <p className="mt-1 text-xs text-stone-500">
-          Se necesita otro pesaje para ver la curva
-        </p>
-      </div>
-    )
-  }
-
-  const weights = points.map((item) => item.peso_kg)
-  const min = Math.min(...weights)
-  const max = Math.max(...weights)
-  const pad = Math.max(1, (max - min) * 0.2)
-  const yMin = min - pad
-  const yMax = max + pad
-  const width = 320
-  const height = 140
-  const left = 36
-  const right = 10
-  const top = 12
-  const bottom = 24
-  const innerW = width - left - right
-  const innerH = height - top - bottom
-  const coords = points.map((item, index) => {
-    const x = left + (index / (points.length - 1)) * innerW
-    const y = top + ((yMax - item.peso_kg) / (yMax - yMin)) * innerH
-    return { x, y, item }
-  })
-  const path = coords
-    .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(1)},${point.y.toFixed(1)}`)
-    .join(' ')
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full" role="img" aria-label="Curva de pesajes">
-      <line x1={left} y1={top} x2={left} y2={height - bottom} stroke="#e7e5e4" />
-      <line
-        x1={left}
-        y1={height - bottom}
-        x2={width - right}
-        y2={height - bottom}
-        stroke="#e7e5e4"
-      />
-      <text x={4} y={top + 8} className="fill-stone-400" fontSize="9">
-        {yMax.toFixed(0)}
-      </text>
-      <text x={4} y={height - bottom} className="fill-stone-400" fontSize="9">
-        {yMin.toFixed(0)}
-      </text>
-      <path d={path} fill="none" stroke="#1b5d3b" strokeWidth="2.5" strokeLinejoin="round" />
-      {coords.map((point) => (
-        <circle
-          key={point.item.id}
-          cx={point.x}
-          cy={point.y}
-          r="3.5"
-          fill="#1b5d3b"
-        />
-      ))}
-      <text
-        x={coords[0].x}
-        y={height - 6}
-        className="fill-stone-400"
-        fontSize="9"
-        textAnchor="start"
-      >
-        {formatIso(coords[0].item.fecha_pesaje)}
-      </text>
-      <text
-        x={coords[coords.length - 1].x}
-        y={height - 6}
-        className="fill-stone-400"
-        fontSize="9"
-        textAnchor="end"
-      >
-        {formatIso(coords[coords.length - 1].item.fecha_pesaje)}
-      </text>
-    </svg>
-  )
-}
-
+// RF-UC07-02: presenta próximas aplicaciones y vencimientos del hato junto a su historial.
 function SanitaryCalendar({
   bovines,
   records,
@@ -1544,57 +1072,7 @@ function SanitaryCalendar({
   )
 }
 
-function HistoryItem({
-  item,
-  caption,
-  onRemove,
-}: {
-  item: SanitaryRecord
-  caption?: string
-  onRemove?: (id: string) => void
-}) {
-  const kind = kindById[item.tipo]
-  const Icon = kind.icon
-  return (
-    <div className="flex gap-3">
-      <div className={`mt-1 h-full w-1 shrink-0 rounded-full ${kind.bar}`} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-stone-900">
-              {caption ? `${caption} · ` : ''}
-              {item.producto}
-            </p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-stone-500">
-              <Icon className="size-3.5" />
-              {kind.label} · {formatIso(item.fecha)}
-              {item.dosis ? ` · ${item.dosis}` : ''}
-            </p>
-          </div>
-          {onRemove ? (
-            <button
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="cursor-pointer text-xs font-medium text-stone-400 hover:text-red-700"
-            >
-              Quitar
-            </button>
-          ) : null}
-        </div>
-        {item.proxima ? (
-          <p className="mt-1 text-xs text-stone-600">Próxima {formatIso(item.proxima)}</p>
-        ) : null}
-        {item.responsable ? (
-          <p className="mt-1 text-xs text-stone-500">Aplicó {item.responsable}</p>
-        ) : null}
-        {item.observaciones ? (
-          <p className="mt-1 text-xs text-stone-500">{item.observaciones}</p>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
+// Presenta un filtro y resalta la opción seleccionada.
 function FilterChip({
   active,
   onClick,
@@ -1609,27 +1087,6 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={`shrink-0 cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${active ? 'bg-bovi text-white' : 'bg-white text-stone-600'
-        }`}
-    >
-      {label}
-    </button>
-  )
-}
-
-function SegmentButton({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`min-h-11 cursor-pointer rounded-xl text-sm font-medium ${active ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500'
         }`}
     >
       {label}

@@ -18,26 +18,22 @@ import { AddBovineModal } from '../components/dashboard/AddBovineModal.tsx'
 import { CreateFarmModal } from '../components/dashboard/CreateFarmModal.tsx'
 import { QuickWeighCard } from '../components/dashboard/QuickWeighCard.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
-import { useAuth } from '../auth/AuthProvider.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
+import { useAuth } from '../auth/useAuth.ts'
+import { useFarm } from '../context/useFarm.ts'
+import { bovineLabel, createBovine, loadBovines } from '../lib/bovines.ts'
+import { computeMetrics, greetingForNow, saleHints } from '../lib/dashboard.ts'
+import { loadTasks, updateTaskDone } from '../lib/tasks.ts'
+import { loadTreatments } from '../lib/sanitary.ts'
 import {
-  bovineLabel,
-  computeMetrics,
-  createBovine,
-  greetingForNow,
-  loadBovines,
-  loadTasks,
-  loadTreatments,
   loadWeighings,
   readPendingWeighings,
-  roleLabel,
-  saleHints,
   saveWeighing,
-  updateTaskDone,
   writePendingWeighings,
-} from '../lib/dashboard.ts'
+} from '../lib/weighings.ts'
+import { roleLabel } from '../lib/farms.ts'
 import type { Bovine, SaleHint, Task, Treatment } from '../types/dashboard.ts'
 
+// RF-UC03-01, RF-UC05-01 y RF-UC11-02: coordina el resumen y las capturas rápidas de la finca.
 export default function HomePage() {
   const { user } = useAuth()
   const { farms, activeFarm, role, loading, setActiveFarmId, createAndSelectFarm } =
@@ -70,9 +66,11 @@ export default function HomePage() {
     'productor'
 
   useEffect(() => {
+    // Actualiza el indicador de conexión para habilitar los reintentos de pesajes.
     function onOnline() {
       setOnline(true)
     }
+    // Actualiza el indicador de conexión para conservar capturas pendientes.
     function onOffline() {
       setOnline(false)
     }
@@ -102,6 +100,7 @@ export default function HomePage() {
 
     const farmId = activeFarm.id
     let active = true
+    // Carga el hato y sus datos asociados, descartando respuestas de una finca anterior.
     async function load() {
       try {
         const nextBovines = await loadBovines(farmId)
@@ -138,6 +137,7 @@ export default function HomePage() {
     if (pending.length === 0) return
     const userId = user.id
 
+    // RF-TR-02 (parcial): reintenta la cola heredada de pesajes cuando Inicio está conectado.
     async function flush() {
       const remaining = []
       for (const item of pending) {
@@ -161,11 +161,13 @@ export default function HomePage() {
     return treatments.filter((item) => item.proxima_aplicacion === today)
   }, [treatments])
 
+  // RF-UC03-01: crea y selecciona una finca desde el formulario de Inicio.
   async function handleCreateFarm(nombre: string, ubicacion: string) {
     await createAndSelectFarm(nombre, ubicacion)
     setToast({ message: 'Finca creada y seleccionada', tone: 'ok' })
   }
 
+  // RF-UC04-01: persiste el alta rápida y actualiza el hato visible.
   async function handleCreateBovine(
     payload: Omit<Parameters<typeof createBovine>[0], 'finca_id'>,
   ) {
@@ -182,6 +184,7 @@ export default function HomePage() {
     setToast({ message: 'Bovino guardado en la finca activa', tone: 'ok' })
   }
 
+  // RF-UC05-01 y RF-TR-01 (parcial): guarda el pesaje online o en la cola heredada.
   async function handleSaveWeighing(payload: {
     bovino_id: string
     peso_kg: number
@@ -205,6 +208,7 @@ export default function HomePage() {
     }
   }
 
+  // RF-UC11-02: solicita cambiar el estado de la tarea y actualiza la lista de Inicio.
   async function toggleTask(task: Task, done: boolean) {
     setTasks((current) =>
       current.map((item) =>
@@ -353,7 +357,7 @@ export default function HomePage() {
       />
 
       <section className="mt-5 space-y-4">
-        {role === 'campo' ? (
+        {role !== 'admin' ? (
           <>
             <Card
               title="Mis tareas del día"
@@ -501,6 +505,7 @@ export default function HomePage() {
   )
 }
 
+// Presenta un indicador del inicio con su icono, etiqueta y valor.
 function MetricCard({
   icon,
   label,
@@ -521,6 +526,7 @@ function MetricCard({
   )
 }
 
+// Presenta un bloque del inicio con título y acción opcional.
 function Card({
   title,
   action,
@@ -541,6 +547,7 @@ function Card({
   )
 }
 
+// Presenta el resultado de la sugerencia heredada de venta con su estado visual.
 function SaleBadge({ status }: { status: SaleHint['status'] }) {
   const map = {
     apto: { label: 'Apto para venta', className: 'bg-bovi text-white' },
@@ -557,6 +564,7 @@ function SaleBadge({ status }: { status: SaleHint['status'] }) {
   )
 }
 
+// Presenta un enlace de acceso a otro módulo de la aplicación.
 function Shortcut({
   to,
   icon,

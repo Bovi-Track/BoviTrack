@@ -1,18 +1,27 @@
 import { Plus, Warehouse } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
-import { todayIso } from '../lib/dashboard.ts'
+import { useFarm } from '../context/useFarm.ts'
+import { todayIso } from '../lib/dates.ts'
 import {
-  deactivateInventoryItem, inventoryErrorMessage, loadInventory, loadInventoryMovements,
-  registerInventoryMovement, saveInventoryItem,
+  deactivateInventoryItem,
+  inventoryErrorMessage,
+  loadInventory,
+  loadInventoryMovements,
+  registerInventoryMovement,
+  saveInventoryItem,
 } from '../lib/inventory.ts'
 import type { Farm, FarmRole } from '../types/dashboard.ts'
 import {
-  INVENTORY_CATEGORIES, MOVEMENT_TYPES, movementLabels,
-  type InventoryCategory, type InventoryItem, type InventoryMovement, type MovementType,
+  INVENTORY_CATEGORIES,
+  MOVEMENT_TYPES,
+  movementLabels,
+  type InventoryCategory,
+  type InventoryItem,
+  type InventoryMovement,
+  type MovementType,
 } from '../types/inventory.ts'
 
 const actionClass = 'min-h-11 cursor-pointer rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-bovi disabled:cursor-not-allowed disabled:opacity-50'
@@ -21,9 +30,11 @@ const categoryLabels: Record<InventoryCategory, string> = {
   ALIMENTO: 'Alimento', SUPLEMENTO: 'Suplemento', MEDICAMENTO: 'Medicamento', VACUNA: 'Vacuna',
 }
 const units = ['kg', 'qq', 'L', 'und', 'dosis']
+// Formatea cantidades de inventario con hasta dos decimales para la interfaz.
 const quantityLabel = (value: number) => value.toLocaleString('es-CR', { maximumFractionDigits: 2 })
 type Dialog = { kind: 'catalog'; item?: InventoryItem } | { kind: 'movement' | 'deactivate'; item: InventoryItem }
 
+// RF-UC08-01 y RF-UC09-02: exige finca y rol cargados antes de presentar inventario.
 export default function InventoryPage() {
   const { activeFarm, rolesByFarm, loading, loadedUserId } = useFarm()
   const { user, loading: authLoading } = useAuth()
@@ -36,6 +47,7 @@ export default function InventoryPage() {
   return <FarmInventory key={`${user.id}:${activeFarm.id}:${role}`} farm={activeFarm} role={role} />
 }
 
+// RF-UC08-01, RF-UC09-01 y RF-UC09-02: coordina catálogo, movimientos e historial por finca.
 function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,6 +90,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
     return () => window.clearTimeout(timer)
   }, [toast])
 
+  // Recarga catálogo y saldos, ignorando una respuesta si otra solicitud la reemplazó.
   async function refreshItems() {
     const request = ++catalogRequest.current
     setLoading(true)
@@ -91,6 +104,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
     }
   }
 
+  // Carga una página de historial y descarta respuestas de otro insumo o solicitud.
   async function fetchHistory(itemId: string, offset: number) {
     const request = ++historyRequest.current
     setHistoryLoading(true)
@@ -107,6 +121,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
     }
   }
 
+  // Selecciona un insumo y reinicia su historial antes de consultar la primera página.
   function select(item: InventoryItem) {
     setSelectedId(item.id)
     setHistory([])
@@ -114,6 +129,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
     void fetchHistory(item.id, 0)
   }
 
+  // Inicializa el formulario correspondiente al alta, edición, movimiento o desactivación.
   function openDialog(next: Dialog) {
     setSaveError(null)
     if (next.kind === 'catalog') setCatalog({ nombre: next.item?.nombre ?? '', tipo: next.item?.tipo ?? 'ALIMENTO', unidad_medida: next.item?.unidad_medida ?? 'kg' })
@@ -121,6 +137,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
     setDialog(next)
   }
 
+  // RF-UC08-01 y RF-UC09-01: envía la operación elegida y actualiza los datos confirmados.
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!dialog || submitting.current) return

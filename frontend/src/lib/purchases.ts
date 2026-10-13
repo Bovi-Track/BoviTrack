@@ -1,6 +1,7 @@
 import { supabase } from './supabase.ts'
 import type { CreatePurchaseInput, PurchaseResult } from '../types/purchases.ts'
 
+// RF-UC01-01 y RF-UC01-02: envía la compra completa a su RPC transaccional.
 export async function createPurchase(payload: CreatePurchaseInput) {
   const { data, error } = await supabase.rpc('registrar_compra_subasta', {
     p_id_subasta: payload.id_subasta,
@@ -15,6 +16,7 @@ export async function createPurchase(payload: CreatePurchaseInput) {
   return data as PurchaseResult
 }
 
+// Traduce errores de compra y unicidad de identificadores para el formulario.
 export function purchaseErrorMessage(cause: unknown) {
   const error = cause as { code?: string; message?: string } | null
   if (error?.code === '23505') {
@@ -30,6 +32,7 @@ export function purchaseErrorMessage(cause: unknown) {
   return 'No se pudo registrar la compra. Revisa los datos e inténtalo de nuevo.'
 }
 
+// RF-UC01-02: estima costos y transporte proporcional; la RPC confirma el cálculo final.
 export function calculatePurchasePreview(
   bovines: { peso_compra_kg: number; precio_compra_kilo: number }[],
   freight: number,

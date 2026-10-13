@@ -7,6 +7,7 @@ type CreateFarmModalProps = {
   onCreate: (nombre: string, ubicacion: string) => Promise<void>
 }
 
+// RF-UC03-01: captura nombre y ubicación para crear una finca.
 export function CreateFarmModal({
   open,
   onClose,
@@ -17,6 +18,7 @@ export function CreateFarmModal({
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // RF-UC03-01: valida los campos y solicita crear la finca desde el formulario.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')

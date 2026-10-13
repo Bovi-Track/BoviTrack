@@ -1,24 +1,19 @@
 import { FileText, Plus, Scale, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
+import { useFarm } from '../context/useFarm.ts'
+import { bovineLabel, loadBovines } from '../lib/bovines.ts'
 import {
-  bovineLabel,
-  loadBovines,
   loadWeighings,
   readPendingWeighings,
   saveWeighing,
-  todayIso,
   weighingErrorMessage,
   writePendingWeighings,
-} from '../lib/dashboard.ts'
-import {
-  buildWeeklyReportPdf,
-  isAbortError,
-  saveReportPdf,
-} from '../lib/report.ts'
+} from '../lib/weighings.ts'
+import { todayIso } from '../lib/dates.ts'
+import { buildWeeklyReportPdf, isAbortError, saveReportPdf } from '../lib/report.ts'
 import type { Bovine, Weighing } from '../types/dashboard.ts'
 
 type WeighingRow = Weighing & { bovine?: Bovine }
@@ -30,6 +25,7 @@ const emptyForm = {
   observaciones: '',
 }
 
+// RF-UC05-01 y RF-UC06-02: coordina captura y consulta del historial de pesajes.
 export default function WeighingsPage() {
   const { user } = useAuth()
   const { activeFarm, loading } = useFarm()
@@ -60,6 +56,7 @@ export default function WeighingsPage() {
     }
     const farmId = activeFarm.id
     let active = true
+    // Carga hato y pesajes de la finca, descartando resultados de solicitudes anteriores.
     async function load() {
       try {
         const nextBovines = await loadBovines(farmId)
@@ -99,6 +96,7 @@ export default function WeighingsPage() {
     })
   }, [query, rows])
 
+  // RF-TR-03 (parcial): descarga el PDF semanal construido con los pesajes cargados.
   async function saveWeeklyReport() {
     if (!activeFarm) {
       setToast({ message: 'Selecciona una finca activa desde Inicio.', tone: 'warn' })
@@ -125,15 +123,18 @@ export default function WeighingsPage() {
     }
   }
 
+  // Actualiza un campo del formulario de captura de pesajes.
   function update(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  // Incorpora el pesaje confirmado a la lista visible sin volver a consultar todo el historial.
   function addRow(payload: Weighing) {
     const bovine = bovines.find((item) => item.id === payload.bovino_id)
     setRows((current) => [{ ...payload, bovine }, ...current])
   }
 
+  // RF-UC05-01 y RF-TR-01 (parcial): valida el pesaje y guarda online o en la cola heredada.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const peso = Number(form.peso_kg)

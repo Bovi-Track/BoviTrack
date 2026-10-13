@@ -1,16 +1,14 @@
 import { Lock } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
 import { PasswordRules } from '../components/auth/PasswordRules.tsx'
 import { actualizarPassword, mensajeAuth } from '../lib/auth.ts'
-import {
-  MIN_PASSWORD_LENGTH,
-  validarPasswordRegistro,
-} from '../lib/passwordPolicy.ts'
+import { MIN_PASSWORD_LENGTH, validarPasswordRegistro } from '../lib/passwordPolicy.ts'
 
+// Comprueba si el enlace actual contiene parámetros de recuperación de contraseña.
 function hasRecoveryCallback() {
   const search = new URLSearchParams(window.location.search)
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
@@ -22,6 +20,7 @@ function hasRecoveryCallback() {
   )
 }
 
+// RF-UC14-02: presenta el cambio de contraseña para una sesión de recuperación.
 export default function ResetPasswordPage() {
   const { user, loading, clearPasswordRecovery } = useAuth()
   const navigate = useNavigate()
@@ -41,6 +40,7 @@ export default function ResetPasswordPage() {
     return () => window.clearTimeout(timer)
   }, [user, waitingCallback])
 
+  // RF-UC14-02: confirma la nueva contraseña y cierra el estado de recuperación.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 

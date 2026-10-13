@@ -8,6 +8,7 @@ type ModalProps = {
   children: ReactNode
 }
 
+// Muestra un diálogo con título y cierre sobre el contenido de la página.
 export function Modal({
   title,
   description,
@@ -43,6 +44,7 @@ export function Modal({
 export const fieldClass =
   'w-full rounded-xl border border-stone-200 bg-white px-3 py-3 text-base text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-bovi focus:ring-2 focus:ring-bovi/20'
 
+// Asocia la etiqueta de un formulario con su control de entrada.
 export function Field({
   id,
   label,

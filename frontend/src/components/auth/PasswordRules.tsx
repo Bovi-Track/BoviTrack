@@ -5,6 +5,7 @@ type PasswordRulesProps = {
   password: string
 }
 
+// Presenta los criterios de contraseña y cuáles cumple el texto ingresado.
 export function PasswordRules({ password }: PasswordRulesProps) {
   return (
     <ul className="mt-2 space-y-1" aria-live="polite">

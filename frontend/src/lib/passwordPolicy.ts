@@ -31,6 +31,7 @@ export const PASSWORD_RULES = [
   },
 ] as const
 
+// Enumera los incumplimientos de la política de contraseña y de datos personales.
 export function passwordIssues(
   password: string,
   extras: { username?: string; email?: string } = {},
@@ -58,6 +59,7 @@ export function passwordIssues(
   return issues
 }
 
+// Valida coincidencia y política de contraseña para registro y recuperación.
 export function validarPasswordRegistro(
   password: string,
   confirmPassword: string,

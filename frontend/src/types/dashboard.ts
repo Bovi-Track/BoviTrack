@@ -53,9 +53,11 @@ export type UpdateBovineInput = {
 export type Task = {
   id: string
   titulo: string
-  descripcion: string | null
-  estado: string
-  fecha_limite: string | null
+  descripcion: string
+  estado: 'PENDIENTE' | 'COMPLETADA'
+  fecha_limite: string
+  asignada_a: string | null
+  asignada_nombre: string
 }
 
 export type Treatment = {

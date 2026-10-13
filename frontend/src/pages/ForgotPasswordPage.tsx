@@ -1,11 +1,12 @@
 import { User } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider.tsx'
+import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
 import { mensajeAuth, solicitarRestablecimiento } from '../lib/auth.ts'
 
+// RF-UC14-02: presenta la solicitud de recuperación por correo o usuario.
 export default function ForgotPasswordPage() {
   const { user, loading, passwordRecovery } = useAuth()
   const location = useLocation()
@@ -25,6 +26,7 @@ export default function ForgotPasswordPage() {
     return <Navigate to="/inicio" replace />
   }
 
+  // RF-UC14-02: solicita el enlace y muestra confirmación sin revelar la existencia de la cuenta.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')

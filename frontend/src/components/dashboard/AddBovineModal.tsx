@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { todayIso } from '../../lib/dashboard.ts'
+import { todayIso } from '../../lib/dates.ts'
 import { Field, Modal, fieldClass } from './Modal.tsx'
 
 type AddBovineModalProps = {
@@ -30,6 +30,7 @@ const emptyForm = {
   fecha_ingreso: todayIso(),
 }
 
+// RF-UC04-01: captura y valida los datos básicos del alta individual de un toro.
 export function AddBovineModal({
   open,
   farmName,
@@ -40,10 +41,12 @@ export function AddBovineModal({
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Actualiza un campo del formulario de alta individual.
   function update(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  // RF-UC04-01: valida identificadores y envía los datos del toro al flujo de alta.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')

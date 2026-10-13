@@ -1,6 +1,7 @@
 import { Plus, ScanLine } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
-import { bovineLabel, todayIso } from '../../lib/dashboard.ts'
+import { bovineLabel } from '../../lib/bovines.ts'
+import { todayIso } from '../../lib/dates.ts'
 import type { Bovine } from '../../types/dashboard.ts'
 import { fieldClass } from './Modal.tsx'
 
@@ -15,6 +16,7 @@ type QuickWeighCardProps = {
   }) => Promise<void>
 }
 
+// RF-UC05-01: permite seleccionar un toro y capturar un pesaje positivo.
 export function QuickWeighCard({
   bovines,
   disabled,
@@ -44,6 +46,7 @@ export function QuickWeighCard({
 
   const selected = bovines.find((item) => item.id === selectedId) ?? null
 
+  // RF-UC05-01: valida toro y peso antes de enviar la captura rápida.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedId) {

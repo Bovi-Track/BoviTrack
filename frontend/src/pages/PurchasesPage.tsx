@@ -2,8 +2,8 @@ import { ArrowLeft, CheckCircle2, Plus, ShoppingBag, Trash2 } from 'lucide-react
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Field, fieldClass } from '../components/dashboard/Modal.tsx'
-import { useFarm } from '../context/FarmContext.tsx'
-import { todayIso } from '../lib/dashboard.ts'
+import { useFarm } from '../context/useFarm.ts'
+import { todayIso } from '../lib/dates.ts'
 import { calculatePurchasePreview, createPurchase, purchaseErrorMessage } from '../lib/purchases.ts'
 import type { Farm } from '../types/dashboard.ts'
 import type { PurchaseBovineInput, PurchaseResult } from '../types/purchases.ts'
@@ -39,6 +39,7 @@ const money = new Intl.NumberFormat('es-CR', {
   maximumFractionDigits: 2,
 })
 
+// Inicializa los campos de compra con fecha actual y sin costos capturados.
 function newHeader(): PurchaseHeader {
   return {
     id_subasta: '',
@@ -49,6 +50,7 @@ function newHeader(): PurchaseHeader {
   }
 }
 
+// Inicializa un toro de compra con sus campos de peso y precio sin capturar.
 function newBovine(): BovineDraft {
   return {
     localId: crypto.randomUUID(),
@@ -65,6 +67,7 @@ function newBovine(): BovineDraft {
   }
 }
 
+// RF-UC01-01 y RF-UC01-02: coordina captura, estimación y confirmación de la compra.
 export default function PurchasesPage() {
   const { farms, rolesByFarm, activeFarm, loading } = useFarm()
   const [header, setHeader] = useState<PurchaseHeader>(newHeader)
@@ -86,16 +89,19 @@ export default function PurchasesPage() {
     [bovines, header.costo_flete_total],
   )
 
+  // Actualiza un campo de la cabecera de compra.
   function updateHeader(field: keyof PurchaseHeader, value: string) {
     setHeader((current) => ({ ...current, [field]: value }))
   }
 
+  // Actualiza un campo del toro identificado dentro de la compra múltiple.
   function updateBovine(localId: string, field: BovineField, value: string) {
     setBovines((current) => current.map((bovine) =>
       bovine.localId === localId ? { ...bovine, [field]: value } : bovine,
     ))
   }
 
+  // RF-UC01-01 y RF-UC01-02: valida la compra completa y solicita su guardado transaccional.
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
@@ -151,6 +157,7 @@ export default function PurchasesPage() {
     }
   }
 
+  // Limpia el resultado y reinicia los formularios para otra compra.
   function startAgain() {
     setHeader(newHeader())
     setBovines([newBovine()])
@@ -357,6 +364,7 @@ export default function PurchasesPage() {
   )
 }
 
+// Presenta un concepto y su importe en el resumen de compra.
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
@@ -366,6 +374,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+// RF-UC01-01 y RF-UC01-02: presenta la compra confirmada y los costos asignados por toro.
 function PurchaseSuccess({
   result,
   farms,

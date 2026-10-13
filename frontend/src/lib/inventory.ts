@@ -1,28 +1,40 @@
 import { supabase } from './supabase.ts'
 import {
-  INVENTORY_CATEGORIES, MOVEMENT_TYPES,
-  type InventoryItem, type InventoryMovement, type InventoryReport, type InventorySummary,
-  type InventoryCategory, type MovementType, type MovementPage,
+  INVENTORY_CATEGORIES,
+  MOVEMENT_TYPES,
+  type InventoryItem,
+  type InventoryMovement,
+  type InventoryReport,
+  type InventorySummary,
+  type InventoryCategory,
+  type MovementType,
+  type MovementPage,
 } from '../types/inventory.ts'
 
+// Construye el error común para una respuesta de inventario que no respeta el contrato.
 const invalid = () => new Error('El servidor devolvió datos de inventario inválidos. Actualiza e intenta consultar de nuevo.')
+// Exige un objeto JSON antes de adaptar sus propiedades.
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid()
   return value as Record<string, unknown>
 }
+// Exige una lista JSON antes de transformar sus elementos.
 function list(value: unknown): unknown[] {
   if (!Array.isArray(value)) throw invalid()
   return value
 }
+// Exige un texto no vacío para los campos obligatorios del contrato.
 function str(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) throw invalid()
   return value
 }
+// Adapta los textos opcionales manteniendo explícitos los valores null.
 function nullableStr(value: unknown): string | null {
   if (value === null) return null
   if (typeof value !== 'string') throw invalid()
   return value
 }
+// Convierte números del JSON y rechaza formatos inesperados o valores no finitos.
 function num(value: unknown): number {
   if ((typeof value !== 'number' && typeof value !== 'string')
     || (typeof value === 'string' && !/^-?\d+(?:\.\d+)?$/.test(value))) throw invalid()
@@ -30,18 +42,22 @@ function num(value: unknown): number {
   if (!Number.isFinite(n)) throw invalid()
   return n
 }
+// Exige un booleano para evitar interpretar estados ambiguos de la respuesta.
 function bool(value: unknown): boolean {
   if (typeof value !== 'boolean') throw invalid()
   return value
 }
+// Comprueba que la categoría pertenezca a los tipos de insumo permitidos.
 function category(value: unknown): InventoryCategory {
   if (!INVENTORY_CATEGORIES.includes(value as InventoryCategory)) throw invalid()
   return value as InventoryCategory
 }
+// Comprueba que el tipo de movimiento pertenezca al catálogo permitido.
 function movementType(value: unknown): MovementType {
   if (!MOVEMENT_TYPES.includes(value as MovementType)) throw invalid()
   return value as MovementType
 }
+// Verifica formato y fecha de calendario sin aceptar días inexistentes.
 export function validInventoryDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const [y, m, d] = value.split('-').map(Number)
@@ -49,16 +65,19 @@ export function validInventoryDate(value: string): boolean {
   date.setFullYear(y, m - 1, d)
   return y > 0 && date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d
 }
+// Adapta una fecha del contrato y rechaza valores inválidos.
 function date(value: unknown): string {
   const s = str(value)
   if (!validInventoryDate(s)) throw invalid()
   return s
 }
+// Valida ambas fechas del periodo y que Desde no sea posterior a Hasta.
 export function validateInventoryPeriod(desde: string, hasta: string) {
   if (!validInventoryDate(desde) || !validInventoryDate(hasta) || desde > hasta) {
     throw new Error('Selecciona fechas válidas con Desde menor o igual a Hasta.')
   }
 }
+// Valida cantidad positiva, límite numérico y máximo dos decimales antes de enviar.
 export function parseInventoryQuantity(value: string): number {
   if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw new Error('Usa una cantidad positiva con máximo dos decimales.')
   const cantidad = Number(value)
@@ -67,6 +86,7 @@ export function parseInventoryQuantity(value: string): number {
   }
   return cantidad
 }
+// Traduce errores de acceso, validación y red del inventario para la interfaz.
 export function inventoryErrorMessage(cause: unknown): string {
   const error = cause as { code?: string; message?: string } | null
   if (error?.message?.includes('INVENTARIO_')) return error.message.replace(/^.*?INVENTARIO_[A-Z_]+:\s*/, '')
@@ -77,16 +97,19 @@ export function inventoryErrorMessage(cause: unknown): string {
   }
   return error?.message ?? 'No se pudo consultar o guardar el inventario. Intenta nuevamente.'
 }
+// Ejecuta una RPC de inventario y traduce el error antes de adaptar la respuesta.
 async function rpc(name: string, args: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await supabase.rpc(name, args)
   if (error) throw new Error(inventoryErrorMessage(error))
   return data
 }
+// Adapta un insumo del JSON manteniendo estado, categoría y saldo tipados.
 function item(value: unknown): InventoryItem {
   const r = object(value)
   return { id: str(r.id), finca_id: str(r.finca_id), nombre: str(r.nombre), tipo: category(r.tipo),
     unidad_medida: str(r.unidad_medida), activo: bool(r.activo), stock: num(r.stock) }
 }
+// Adapta un movimiento del JSON con cantidad, fechas y responsable tipados.
 function movement(value: unknown): InventoryMovement {
   const r = object(value)
   const cantidad = num(r.cantidad)
@@ -96,11 +119,13 @@ function movement(value: unknown): InventoryMovement {
     responsable_nombre: nullableStr(r.responsable_nombre), observaciones: nullableStr(r.observaciones),
     created_at: nullableStr(r.created_at) }
 }
+// RF-UC08-01 y RF-UC09-02: consulta catálogo y saldos de la finca autorizada.
 export async function loadInventory(farmId: string): Promise<InventoryItem[]> {
   const rows = list(await rpc('obtener_inventario_finca', { p_finca_id: farmId })).map(item)
   if (rows.some((r) => r.finca_id !== farmId)) throw invalid()
   return rows
 }
+// RF-UC09-02: consulta una página del historial y su total sin mezclar insumos.
 export async function loadInventoryMovements(itemId: string, offset = 0): Promise<MovementPage> {
   const r = object(await rpc('obtener_movimientos_insumo', { p_insumo_id: itemId, p_limite: 50, p_offset: offset }))
   const movimientos = list(r.movimientos).map(movement)
@@ -108,6 +133,7 @@ export async function loadInventoryMovements(itemId: string, offset = 0): Promis
   if (!Number.isSafeInteger(total) || total < movimientos.length || movimientos.some((m) => m.insumo_id !== itemId)) throw invalid()
   return { movimientos, total }
 }
+// RF-UC08-01: valida el formulario y solicita crear o editar un insumo.
 export async function saveInventoryItem(farmId: string, input: {
   nombre: string; tipo: InventoryCategory; unidad_medida: string; id?: string
 }): Promise<InventoryItem> {
@@ -118,11 +144,13 @@ export async function saveInventoryItem(farmId: string, input: {
   if (result.finca_id !== farmId || (input.id && result.id !== input.id)) throw invalid()
   return result
 }
+// RF-UC08-01: solicita desactivar el insumo conservando su historial.
 export async function deactivateInventoryItem(itemId: string): Promise<InventoryItem> {
   const result = item(await rpc('desactivar_insumo', { p_insumo_id: itemId }))
   if (result.id !== itemId || result.activo) throw invalid()
   return result
 }
+// RF-UC09-01: valida la captura y obtiene movimiento y saldo confirmados por la RPC.
 export async function registerInventoryMovement(itemId: string, input: {
   tipo: MovementType; cantidad: string; fecha: string; observaciones: string
 }): Promise<{ movimiento: InventoryMovement; stock: number }> {
@@ -134,6 +162,7 @@ export async function registerInventoryMovement(itemId: string, input: {
   if (movimiento.insumo_id !== itemId || stock < 0) throw invalid()
   return { movimiento, stock }
 }
+// Adapta y valida el reporte, incluyendo periodo, números y coherencia de saldos.
 export function parseInventoryReport(value: unknown): InventoryReport {
   const r = object(value), desde = date(r.desde), hasta = date(r.hasta)
   validateInventoryPeriod(desde, hasta)
@@ -155,6 +184,7 @@ export function parseInventoryReport(value: unknown): InventoryReport {
   if (movimientos.some((m) => !ids.has(m.insumo_id) || m.fecha_movimiento < desde || m.fecha_movimiento > hasta)) throw invalid()
   return { finca_id: str(r.finca_id), finca_nombre: str(r.finca_nombre), desde, hasta, resumen, movimientos }
 }
+// RF-TR-03: consulta el resumen y detalle de bodega para la finca y periodo indicados.
 export async function loadInventoryReport(farmId: string, desde: string, hasta: string): Promise<InventoryReport> {
   validateInventoryPeriod(desde, hasta)
   const report = parseInventoryReport(await rpc('obtener_reporte_inventario', {
