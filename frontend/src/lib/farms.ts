@@ -120,7 +120,7 @@ export async function loadFarmMembers(farmId: string): Promise<FarmMember[]> {
   }))
 }
 
-// RF-UC15-01 y RF-UC15-02 (parcial): asocia una cuenta existente con finca y rol.
+// RF-UC15-01 y RF-UC15-02 (parcial): agrega o actualiza el rol de la membresía por finca.
 export async function addFarmMember(
   farmId: string,
   email: string,
