@@ -1,5 +1,5 @@
-import { validarPasswordRegistro } from './passwordPolicy.ts'
-import { supabase, setRememberMe } from './supabase.ts'
+import { validarPasswordRegistro } from '../lib/passwordPolicy.ts'
+import { supabase, setRememberMe } from '../lib/supabase.ts'
 
 // Identifica si el dato de inicio de sesión tiene formato de correo.
 export function looksLikeEmail(value: string) {
@@ -75,6 +75,11 @@ export async function iniciarSesion(
   }
 
   return supabase.auth.signInWithPassword({ email, password })
+}
+
+// Cierra la sesión de este navegador sin cerrar las sesiones de otros dispositivos.
+export async function cerrarSesion() {
+  return supabase.auth.signOut({ scope: 'local' })
 }
 
 // Obtiene el origen de la aplicación para construir enlaces de autenticación.

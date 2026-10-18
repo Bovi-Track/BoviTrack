@@ -4,7 +4,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
-import { mensajeAuth, solicitarRestablecimiento } from '../lib/auth.ts'
+import { mensajeAuth, solicitarRestablecimiento } from '../auth/service.ts'
 
 // RF-UC14-02: presenta la solicitud de recuperación por correo o usuario.
 export default function ForgotPasswordPage() {
@@ -32,19 +32,22 @@ export default function ForgotPasswordPage() {
     setError('')
     setInfo('')
     setSubmitting(true)
+    try {
+      const { error: resetError } = await solicitarRestablecimiento(identifier)
 
-    const { error: resetError } = await solicitarRestablecimiento(identifier)
+      if (resetError) {
+        setError(mensajeAuth(resetError.message))
+        return
+      }
 
-    setSubmitting(false)
-
-    if (resetError) {
-      setError(mensajeAuth(resetError.message))
-      return
+      setInfo(
+        'Si existe una cuenta con esos datos, te enviamos un correo para restablecer la contraseña.',
+      )
+    } catch {
+      setError('No se pudo enviar la solicitud. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setSubmitting(false)
     }
-
-    setInfo(
-      'Si existe una cuenta con esos datos, te enviamos un correo para restablecer la contraseña.',
-    )
   }
 
   return (

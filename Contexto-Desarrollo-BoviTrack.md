@@ -17,8 +17,8 @@ Un usuario puede tener un rol distinto en cada finca. La sesión autenticada no 
 
 ## 2. Arquitectura vigente
 
-- **Frontend:** React, TypeScript y Vite, con Tailwind CSS. Interfaz móvil y de escritorio; Cloudflare Pages es el despliegue previsto. El build incluye Service Worker y caché de aplicación; la aceptación offline en Supabase y otros navegadores sigue pendiente.
-- **Autenticación:** Supabase Auth administra credenciales, sesión y JWT. El cliente compartido está en `frontend/src/lib/supabase.ts`; `AuthProvider` expone el usuario y `FarmContext` la finca y sus roles. El manejo de sesión entre módulos todavía necesita estandarización.
+- **Frontend:** React, TypeScript y Vite con Tailwind CSS; Cloudflare Pages es el despliegue previsto. El flujo entra por `main.tsx`, monta `AuthProvider`, resuelve rutas en `App.tsx` y, en rutas privadas, usa `AppShell` y `FarmProvider` antes de mostrar cada página. `pages/` coordina pantallas; `components/` reúne piezas reutilizables por dominio; `lib/` contiene servicios de datos y lógica de dominio; `types/` reúne tipos compartidos. El build incluye Service Worker y caché de aplicación; la aceptación offline en Supabase y otros navegadores sigue pendiente.
+- **Autenticación:** Supabase Auth administra credenciales, sesión y JWT. `frontend/src/auth/` agrupa proveedor, hook y operaciones de acceso; `AuthProvider` es la fuente del usuario activo y las pantallas llaman al servicio de autenticación. `frontend/src/context/` comparte la finca y sus roles. `frontend/src/offline/` resuelve caché y sincronización.
 - **Datos y operaciones:** React usa `supabase-js` para consultas autorizadas y RPC SQL en Supabase. Las reglas de acceso y consistencia deben aplicarse centralmente con RLS, permisos y RPC; los controles visuales solo adaptan la interfaz.
 - **Transacciones:** las operaciones que necesitan consistencia entre varios registros o validación de saldo se resuelven mediante RPC. Las funciones privilegiadas deben validar usuario, cuenta activa, rol y finca, y usar referencias calificadas y `search_path` seguro. En inventario, el acceso a las tablas se realiza exclusivamente mediante sus RPC.
 - **PDF:** generación en el navegador con `jspdf` y `jspdf-autotable`. La sección de bodega consulta su RPC autorizada antes de generar el documento.
@@ -57,7 +57,7 @@ El catálogo, movimientos e historial de inventario están implementados. Su SQL
 
 La evaluación económica completa de venta, el registro de ventas/bajas y la trazabilidad unificada todavía requieren desarrollo. El periodo de bodega no filtra las otras secciones del PDF.
 
-La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La estandarización completa de sesión/permisos sigue pendiente. La capa offline compartida está implementada con IndexedDB y su SQL ya está aplicado en Supabase. La aceptación con administrador real pasó en Chromium; los otros roles y navegadores siguen pendientes.
+La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La sesión se concentra en `AuthProvider`; los formularios liberan su estado de envío ante respuestas y excepciones, y el resultado inicial de Auth no puede sobrescribir un evento de sesión más reciente. La verificación de cuentas inactivas y permisos sigue pendiente. La capa offline compartida está implementada con IndexedDB y su SQL ya está aplicado en Supabase. La aceptación con administrador real pasó en Chromium; los otros roles y navegadores siguen pendientes.
 
 ## 5. Operación offline
 

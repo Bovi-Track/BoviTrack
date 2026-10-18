@@ -4,7 +4,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
-import { iniciarSesion, mensajeAuth } from '../lib/auth.ts'
+import { iniciarSesion, mensajeAuth } from '../auth/service.ts'
 
 // RF-UC14-01: presenta el acceso por correo o usuario con preferencia Recordarme.
 export default function LoginPage() {
@@ -25,21 +25,24 @@ export default function LoginPage() {
     event.preventDefault()
     setError('')
     setSubmitting(true)
+    try {
+      const { error: signInError } = await iniciarSesion(
+        identifier,
+        password,
+        rememberMe,
+      )
 
-    const { error: signInError } = await iniciarSesion(
-      identifier,
-      password,
-      rememberMe,
-    )
+      if (signInError) {
+        setError(mensajeAuth(signInError.message))
+        return
+      }
 
-    setSubmitting(false)
-
-    if (signInError) {
-      setError(mensajeAuth(signInError.message))
-      return
+      navigate('/inicio', { replace: true })
+    } catch {
+      setError('No se pudo iniciar sesión. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setSubmitting(false)
     }
-
-    navigate('/inicio', { replace: true })
   }
 
   return (

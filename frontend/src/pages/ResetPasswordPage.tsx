@@ -5,7 +5,7 @@ import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
 import { PasswordRules } from '../components/auth/PasswordRules.tsx'
-import { actualizarPassword, mensajeAuth } from '../lib/auth.ts'
+import { actualizarPassword, mensajeAuth } from '../auth/service.ts'
 import { MIN_PASSWORD_LENGTH, validarPasswordRegistro } from '../lib/passwordPolicy.ts'
 
 // Comprueba si el enlace actual contiene parámetros de recuperación de contraseña.
@@ -52,21 +52,24 @@ export default function ResetPasswordPage() {
 
     setError('')
     setSubmitting(true)
+    try {
+      const { error: updateError } = await actualizarPassword(
+        password,
+        confirmPassword,
+      )
 
-    const { error: updateError } = await actualizarPassword(
-      password,
-      confirmPassword,
-    )
+      if (updateError) {
+        setError(mensajeAuth(updateError.message))
+        return
+      }
 
-    setSubmitting(false)
-
-    if (updateError) {
-      setError(mensajeAuth(updateError.message))
-      return
+      clearPasswordRecovery()
+      navigate('/inicio', { replace: true })
+    } catch {
+      setError('No se pudo actualizar la contraseña. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setSubmitting(false)
     }
-
-    clearPasswordRecovery()
-    navigate('/inicio', { replace: true })
   }
 
   if (loading || waitingCallback) {

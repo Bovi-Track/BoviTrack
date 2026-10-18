@@ -16,6 +16,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true
+    let authEventReceived = false
 
     // Publica la identidad antes de que las pantallas consulten sus datos locales.
     function applyUser(next: User | null) {
@@ -24,13 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(next)
       setLoading(false)
     }
-
-    if (!isOnline()) applyUser(readOfflineIdentity())
-    else void supabase.auth.getUser().then(({ data, error }) => {
-      const next = error && isConnectionError(error) ? readOfflineIdentity() : data.user
-      if (!error) saveOfflineIdentity(next)
-      applyUser(next)
-    }).catch(() => applyUser(readOfflineIdentity()))
 
     const stopSync = startOfflineSync()
     // Conserva la cola del propietario y solicita autenticación si Supabase rechaza su sesión.
@@ -45,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      authEventReceived = true
       const next = session?.user ?? (!isOnline() ? readOfflineIdentity() : null)
       if (session?.user) saveOfflineIdentity(session.user)
       applyUser(next)
@@ -69,6 +64,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPasswordRecovery(false)
       }
     })
+
+    if (!isOnline()) {
+      applyUser(readOfflineIdentity())
+    } else {
+      void supabase.auth.getUser().then(({ data, error }) => {
+        if (!active || authEventReceived) return
+        const next = error && isConnectionError(error) ? readOfflineIdentity() : data.user
+        if (!error) saveOfflineIdentity(next)
+        applyUser(next)
+      }).catch((cause: unknown) => {
+        if (!active || authEventReceived) return
+        applyUser(isConnectionError(cause) ? readOfflineIdentity() : null)
+      })
+    }
 
     return () => {
       active = false
