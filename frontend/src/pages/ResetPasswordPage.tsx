@@ -32,13 +32,9 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     if (!waitingCallback) return
-    if (user) {
-      setWaitingCallback(false)
-      return
-    }
     const timer = window.setTimeout(() => setWaitingCallback(false), 8000)
     return () => window.clearTimeout(timer)
-  }, [user, waitingCallback])
+  }, [waitingCallback])
 
   // RF-UC14-02: confirma la nueva contraseña y cierra el estado de recuperación.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -72,7 +68,7 @@ export default function ResetPasswordPage() {
     }
   }
 
-  if (loading || waitingCallback) {
+  if (loading || (!user && waitingCallback)) {
     return (
       <div className="flex min-h-svh items-center justify-center bg-cream text-stone-500">
         Cargando…

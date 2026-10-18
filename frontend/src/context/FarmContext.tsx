@@ -18,23 +18,16 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [activeFarmId, setActiveFarmIdState] = useState<string | null>(
     getStoredFarmId(),
   )
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(Boolean(user))
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null)
   const refreshRequest = useRef(0)
 
   // RF-UC03-01 y RF-UC14-03: recarga fincas y roles, descartando respuestas anteriores.
-  const refreshFarms = useCallback(async () => {
+  const refreshFarms = useCallback((): Promise<void> => {
     const request = ++refreshRequest.current
-    if (!user) {
-      setFarms([])
-      setRolesByFarm({})
-      setLoadedUserId(null)
-      setLoading(false)
-      return
-    }
+    if (!user) return Promise.resolve()
 
-    try {
-      const rows = await loadUserFarms(user.id)
+    return loadUserFarms(user.id).then((rows) => {
       if (request !== refreshRequest.current) return
       const nextFarms = rows.map((row) => row.farm)
       const nextRoles = Object.fromEntries(
@@ -53,21 +46,24 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         storeFarmId(next)
         return next
       })
-    } catch {
+    }).catch(() => {
       if (request !== refreshRequest.current) return
       setFarms([])
       setRolesByFarm({})
       setLoadedUserId(null)
       setActiveFarmIdState(null)
-    } finally {
+    }).finally(() => {
       if (request === refreshRequest.current) setLoading(false)
-    }
+    })
   }, [user])
 
   useEffect(() => {
     void refreshFarms()
     window.addEventListener('bovitrack:access', refreshFarms)
-    return () => window.removeEventListener('bovitrack:access', refreshFarms)
+    return () => {
+      refreshRequest.current += 1
+      window.removeEventListener('bovitrack:access', refreshFarms)
+    }
   }, [refreshFarms])
 
   // RF-UC03-01: selecciona la finca de trabajo y conserva la preferencia del navegador.

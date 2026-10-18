@@ -48,7 +48,6 @@ export type UpdateBovineInput = {
   nombre: string | null
   raza: string | null
   color: string | null
-  estado: BovineStatus
 }
 
 export type Task = {

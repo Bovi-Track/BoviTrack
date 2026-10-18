@@ -10,6 +10,7 @@ import {
 } from '../lib/bovines.ts'
 import { BullSanitaryDetail } from '../components/bovines/BovineDetail.tsx'
 import { DisposalSection } from '../components/bovines/DisposalSection.tsx'
+import { BovineMovementSection } from '../components/bovines/BovineMovementSection.tsx'
 import {
   kinds,
   kindById,
@@ -96,7 +97,7 @@ function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
   }
 }
 
-// RF-UC04-01, RF-UC07-01/02 y RF-UC13-01: coordina altas, ficha, sanidad y bajas del hato.
+// RF-UC03-02, RF-UC04-01, RF-UC07-01/02 y RF-UC13-01: coordina ficha, movimientos, sanidad y bajas.
 export default function BullsPage() {
   const revision = useOfflineRevision()
   const { activeFarm, role, loading } = useFarm()
@@ -135,17 +136,7 @@ export default function BullsPage() {
   }, [toast])
 
   useEffect(() => {
-    setRecords([])
-    setSelectedId(null)
-    setKindFilter('TODOS')
-  }, [activeFarm?.id])
-
-  useEffect(() => {
-    if (!activeFarm) {
-      setBovines([])
-      setWeighings([])
-      return
-    }
+    if (!activeFarm) return
     const farmId = activeFarm.id
     let active = true
     // Carga toros, pesajes y sanidad para la finca actual y descarta respuestas antiguas.
@@ -282,7 +273,7 @@ export default function BullsPage() {
     }
   }
 
-  // RF-UC04-01 (parcial): guarda la ficha; las transiciones de UC-12/13 siguen pendientes.
+  // RF-UC04-01: guarda datos básicos; estado y pertenencia se cambian mediante sus flujos.
   async function onSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selected || !canManage) return
@@ -299,7 +290,6 @@ export default function BullsPage() {
         nombre: editForm.nombre.trim() || null,
         raza: editForm.raza.trim() || null,
         color: editForm.color.trim() || null,
-        estado: editForm.estado,
       })
       setBovines((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
@@ -397,6 +387,21 @@ export default function BullsPage() {
           admin={role === 'admin'}
           farmActive={Boolean(activeFarm?.activo)}
           onRegistered={() => setBovines((rows) => rows.map((row) => row.id === selected.id ? { ...row, estado: 'BAJA' } : row))}
+        />
+        <BovineMovementSection
+          key={`${selected.id}:movimientos:${role}`}
+          bovine={selected}
+          onRegistered={(result) => {
+            if (result.finca_id === activeFarm?.id) {
+              setBovines((rows) => rows.map((row) => row.id === result.bovino_id ? { ...row, estado: result.estado } : row))
+            } else {
+              setBovines((rows) => rows.filter((row) => row.id !== result.bovino_id))
+              setRecords((rows) => rows.filter((row) => row.bovino_id !== result.bovino_id))
+              setWeighings((rows) => rows.filter((row) => row.bovino_id !== result.bovino_id))
+              setSelectedId(null)
+              setToast({ message: 'Movimiento registrado. El toro está en la finca de destino.', tone: 'ok' })
+            }
+          }}
         />
         </>
       ) : (
@@ -807,7 +812,7 @@ export default function BullsPage() {
             <select
               id="edit-estado"
               required
-              disabled={['VENDIDO', 'BAJA'].includes(editForm.estado)}
+              disabled
               value={editForm.estado}
               onChange={(event) =>
                 setEditForm((current) => ({
@@ -821,6 +826,7 @@ export default function BullsPage() {
               <option value="INACTIVO">Inactivo</option>
               {['VENDIDO', 'BAJA'].includes(editForm.estado) ? <option value={editForm.estado}>{bovineStatusLabel(editForm.estado)}</option> : null}
             </select>
+            <p className="mt-1 text-xs text-stone-500">Usa los flujos de movimientos, venta o baja para cambiar el estado.</p>
           </Field>
           {editError ? (
             <p className="text-sm text-red-600" role="alert">

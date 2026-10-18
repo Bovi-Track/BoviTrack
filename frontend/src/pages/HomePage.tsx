@@ -77,15 +77,7 @@ export default function HomePage() {
   }, [toast])
 
   useEffect(() => {
-    if (!activeFarm || !user) {
-      setBovines([])
-      setTasks([])
-      setTreatments([])
-      setWeighings([])
-      setAcquisitionCosts([])
-      setMetrics({ activeBulls: 0, averageGmd: null, weeklyGmd: null, pendingAlerts: 0 })
-      return
-    }
+    if (!activeFarm || !user) return
 
     const farmId = activeFarm.id
     let active = true
