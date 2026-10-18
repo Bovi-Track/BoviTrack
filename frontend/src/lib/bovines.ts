@@ -3,7 +3,7 @@ import { cachedRead, requireConnection } from '../offline/runtime.ts'
 import type { Bovine, CreateBovineInput, UpdateBovineInput } from '../types/dashboard.ts'
 
 const BOVINE_COLUMNS =
-  'id, finca_id, numero_diio, identificador_interno, nombre, raza, color, sexo, estado'
+  'id, finca_id, fecha_ingreso, numero_diio, identificador_interno, nombre, raza, color, sexo, estado'
 
 // Traduce errores de unicidad o guardado del toro a mensajes de interfaz.
 export function bovineErrorMessage(cause: unknown) {

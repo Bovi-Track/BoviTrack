@@ -5,7 +5,7 @@ import { useAuth } from '../auth/useAuth.ts'
 import { AuthField } from '../components/auth/AuthField.tsx'
 import { AuthLayout } from '../components/auth/AuthLayout.tsx'
 import { PasswordRules } from '../components/auth/PasswordRules.tsx'
-import { mensajeAuth, registrarUsuario } from '../lib/auth.ts'
+import { mensajeAuth, registrarUsuario } from '../auth/service.ts'
 import { MIN_PASSWORD_LENGTH, validarPasswordRegistro } from '../lib/passwordPolicy.ts'
 
 // Presenta el registro público actual de cuentas, cuyo alcance está pendiente de confirmar.
@@ -40,28 +40,31 @@ export default function RegisterPage() {
     setError('')
     setInfo('')
     setSubmitting(true)
+    try {
+      const { data, error: signUpError } = await registrarUsuario(
+        email,
+        password,
+        fullName,
+        username,
+        confirmPassword,
+      )
 
-    const { data, error: signUpError } = await registrarUsuario(
-      email,
-      password,
-      fullName,
-      username,
-      confirmPassword,
-    )
+      if (signUpError) {
+        setError(mensajeAuth(signUpError.message))
+        return
+      }
 
-    setSubmitting(false)
+      if (data.session) {
+        navigate('/inicio', { replace: true })
+        return
+      }
 
-    if (signUpError) {
-      setError(mensajeAuth(signUpError.message))
-      return
+      setInfo('Revisa tu correo para confirmar la cuenta e inicia sesión.')
+    } catch {
+      setError('No se pudo crear la cuenta. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setSubmitting(false)
     }
-
-    if (data.session) {
-      navigate('/inicio', { replace: true })
-      return
-    }
-
-    setInfo('Revisa tu correo para confirmar la cuenta e inicia sesión.')
   }
 
   return (

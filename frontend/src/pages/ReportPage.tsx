@@ -32,6 +32,7 @@ export default function ReportPage() {
   const { user, loading: authLoading } = useAuth()
   if (loading || authLoading) return <p className="px-4 pt-10 text-sm text-stone-500">Cargando…</p>
   if (user && loadedUserId !== user.id) return <p role="alert" className="px-4 pt-10 text-sm text-red-700">No se pudo verificar tu acceso a las fincas. <button type="button" className="underline" onClick={() => window.location.reload()}>Reintentar</button></p>
+  if (!activeFarm || rolesByFarm[activeFarm.id] !== 'admin') return <p role="alert" className="p-6">Los reportes requieren el rol ADMINISTRADOR en la finca seleccionada.</p>
   return <FarmReport key={`${user?.id ?? ''}:${activeFarm?.id ?? ''}`} activeFarm={activeFarm}
     canInventory={Boolean(user && activeFarm && rolesByFarm[activeFarm.id] === 'admin')} />
 }
@@ -149,7 +150,7 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
         reportData.farmName,
         currentData.generatedAt,
       )
-      await saveReportPdf(blob, filename)
+      await saveReportPdf(blob, filename, activeFarm!.id, () => live.current)
       if (!live.current) return
       setToast({
         message: 'Elige la carpeta y guarda el PDF.',

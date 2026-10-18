@@ -4,6 +4,7 @@ import {
   Link2,
   Loader2,
   Mail,
+  Save,
   ShieldCheck,
   Tractor,
   Trash2,
@@ -42,6 +43,8 @@ export function MembersSection({
   const [adding, setAdding] = useState(false)
 
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null)
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({})
 
   // Tabs: 'email' | 'link'
   const [inviteTab, setInviteTab] = useState<'email' | 'link'>('email')
@@ -141,6 +144,36 @@ export function MembersSection({
     }
   }
 
+  // RF-UC15-02: cambia únicamente el rol del miembro en esta finca.
+  async function handleChangeRole(member: FarmMember) {
+    const roleId = roleDrafts[member.userId] ?? member.roleId
+    if (!roleId || roleId === member.roleId || member.userId === currentUserId) return
+
+    setUpdatingRoleId(member.userId)
+    try {
+      await addFarmMember(farmId, member.email, roleId)
+      const updated = await loadFarmMembers(farmId)
+      setMembers(updated)
+      setRoleDrafts((current) => {
+        const next = { ...current }
+        delete next[member.userId]
+        return next
+      })
+      onToast({
+        message: `Rol de ${member.email} actualizado solo en esta finca.`,
+        tone: 'ok',
+      })
+    } catch (err) {
+      onToast({
+        message:
+          err instanceof Error ? err.message : 'No se pudo cambiar el rol.',
+        tone: 'error',
+      })
+    } finally {
+      setUpdatingRoleId(null)
+    }
+  }
+
   // RF-UC15-02: genera el enlace de invitación con el rol seleccionado.
   async function handleGenerateLink() {
     if (!linkRoleId) return
@@ -190,6 +223,8 @@ export function MembersSection({
           {members.map((member) => {
             const isCurrentUser = member.userId === currentUserId
             const isRemoving = removingId === member.userId
+            const isUpdatingRole = updatingRoleId === member.userId
+            const selectedRoleId = roleDrafts[member.userId] ?? member.roleId
             return (
               <li
                 key={member.userId}
@@ -203,14 +238,51 @@ export function MembersSection({
                     <p className="truncate text-xs text-stone-500">{member.email}</p>
                   )}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <RoleBadge
-                    role={member.role}
-                  />
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  {roles.length > 0 && member.role !== 'unknown' && (
+                    <>
+                      <label className="sr-only" htmlFor={`member-role-${member.userId}`}>
+                        Rol de {member.email}
+                      </label>
+                      <select
+                        id={`member-role-${member.userId}`}
+                        value={selectedRoleId}
+                        onChange={(event) =>
+                          setRoleDrafts((current) => ({
+                            ...current,
+                            [member.userId]: event.target.value,
+                          }))
+                        }
+                        disabled={isCurrentUser || isUpdatingRole || isRemoving}
+                        className="min-h-9 max-w-44 rounded-lg border border-stone-200 bg-white px-2 text-xs text-stone-700 disabled:opacity-60"
+                      >
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.id}>
+                            {roleOptionLabel(role.nombre)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={isCurrentUser || isUpdatingRole || isRemoving || selectedRoleId === member.roleId}
+                        onClick={() => void handleChangeRole(member)}
+                        className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-bovi transition hover:bg-bovi/10 disabled:cursor-not-allowed disabled:text-stone-300"
+                        aria-label={`Guardar rol de ${member.email}`}
+                        title="Guardar rol"
+                      >
+                        {isUpdatingRole ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Save className="size-4" />
+                        )}
+                      </button>
+                    </>
+                  )}
+                  {member.role === 'unknown' && <RoleBadge role={member.role} />}
                   {!isCurrentUser && (
                     <button
                       type="button"
-                      disabled={isRemoving}
+                      disabled={isRemoving || isUpdatingRole}
                       onClick={() => handleRemove(member)}
                       className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-stone-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                       aria-label={`Eliminar a ${member.email}`}
@@ -267,7 +339,7 @@ export function MembersSection({
         {inviteTab === 'email' && (
           <>
             <p className="text-xs text-stone-500 mb-3">
-              El usuario debe estar registrado en BoviTrack.
+              La cuenta debe estar registrada y activa. Se agregará con el rol elegido sin tener que aceptar una invitación.
             </p>
             <form onSubmit={handleAdd} className="space-y-3">
               <div className="relative">

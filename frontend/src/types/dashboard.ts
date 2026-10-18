@@ -19,6 +19,7 @@ export type FarmMember = {
 export type Bovine = {
   id: string
   finca_id: string
+  fecha_ingreso?: string
   numero_diio: string | null
   identificador_interno: string
   nombre: string | null
@@ -60,6 +61,14 @@ export type Task = {
   asignada_nombre: string
 }
 
+export type TaskHistoryEntry = {
+  fecha_cambio: string
+  cambiado_por: string
+  tipo_cambio: 'EDICION' | 'ESTADO'
+  valores_anteriores: Record<string, unknown>
+  valores_nuevos: Record<string, unknown>
+}
+
 export type Treatment = {
   id: string
   bovino_id: string
@@ -73,6 +82,8 @@ export type Weighing = {
   bovino_id: string
   peso_kg: number
   fecha_pesaje: string
+  es_inicial?: boolean
+  created_at?: string
 }
 
 export type PendingWeighing = {
@@ -83,8 +94,55 @@ export type PendingWeighing = {
 
 export type SaleHint = {
   bovine: Bovine
-  status: 'apto' | 'falta' | 'mantener'
+  status: 'falta_pesajes' | 'falta_parametros' | 'falta_costos' | 'rentable' | 'no_rentable'
   detail: string
+  weighings: number
+  currentWeight?: number
+  recentGmd?: number | null
+  acquisitionCost?: number
+  maintenanceCost?: number
+  accumulatedCost?: number
+  expectedRevenue?: number
+  margin?: number
+  breakEvenPrice?: number
+}
+
+export type BovineAcquisitionCost = {
+  id: string
+  compra_id: string | null
+  precio_compra_kilo: number | null
+  costo_flete_asignado: number
+}
+
+export type SaleRecord = {
+  id: string
+  bovino_id: string
+  identificador_interno: string
+  nombre: string | null
+  fecha_venta: string
+  peso_salida_kg: number
+  precio_kilo: number
+  comprador_canal: string
+  rentabilidad_calculada: number | null
+  costo_compra_calculado: number | null
+  mantenimiento_acumulado: number | null
+}
+
+export type SaleInput = {
+  bovinoId: string
+  fechaVenta: string
+  pesoSalidaKg: number
+  precioKilo: number
+  compradorCanal: string
+  mantenimientoDiario: number
+}
+
+export type SalePreview = {
+  diasMantenimiento: number
+  ingresoBruto: number
+  costoCompra: number | null
+  mantenimientoAcumulado: number
+  rentabilidad: number | null
 }
 
 export type DashboardMetrics = {

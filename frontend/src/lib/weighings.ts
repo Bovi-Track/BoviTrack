@@ -40,9 +40,10 @@ async function fetchWeighings(bovineIds: string[]) {
   if (bovineIds.length === 0) return [] as Weighing[]
   const { data, error } = await supabase
     .from('pesaje')
-    .select('id, bovino_id, peso_kg, fecha_pesaje')
+    .select('id, bovino_id, peso_kg, fecha_pesaje, es_inicial, created_at')
     .in('bovino_id', bovineIds)
     .order('fecha_pesaje', { ascending: true })
+    .order('created_at', { ascending: true })
     .retry(false)
     .abortSignal(AbortSignal.timeout(8000))
 

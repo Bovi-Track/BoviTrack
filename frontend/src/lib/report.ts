@@ -1,5 +1,6 @@
 import { offlineUser, requireConnection } from '../offline/runtime.ts'
 import { operations } from '../offline/store.ts'
+import { supabase } from './supabase.ts'
 import autoTable from 'jspdf-autotable'
 import { bovineStatusLabel, bovineLabel } from './bovines.ts'
 import { formatDate, formatDayLong } from './dates.ts'
@@ -66,7 +67,7 @@ export const REPORT_SECTIONS: ReportSection[] = [
   {
     id: 'venta',
     label: 'Evaluación de venta',
-    description: 'Sugerencias de venta según peso y GMD.',
+    description: 'Pesajes disponibles para evaluar la venta.',
   },
 ]
 
@@ -111,9 +112,11 @@ function formatDateTime(iso: string) {
 
 // Traduce la sugerencia heredada de venta a su etiqueta del PDF.
 function saleLabel(status: SaleHint['status']) {
-  if (status === 'apto') return 'Apto para venta'
-  if (status === 'falta') return 'Falta información'
-  return 'Mantener'
+  if (status === 'rentable') return 'Rentable hoy'
+  if (status === 'no_rentable') return 'No rentable hoy'
+  if (status === 'falta_costos') return 'Faltan costos'
+  if (status === 'falta_parametros') return 'Faltan parámetros'
+  return 'Faltan pesajes'
 }
 
 // Obtiene la posición final de la última tabla para continuar el documento.
@@ -562,7 +565,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   }
 
   if (selection.venta) {
-    y = addHeading(doc, y, 'Evaluación de venta')
+    y = addHeading(doc, y, 'Datos para evaluar venta')
     addTable(
       doc,
       y,
@@ -598,11 +601,16 @@ function isAbortError(cause: unknown) {
 }
 
 // RF-TR-03: inicia la descarga en el navegador de un PDF ya generado.
-export async function saveReportPdf(blob: Blob, filename: string) {
+export async function saveReportPdf(blob: Blob, filename: string, farmId: string, isCurrent = () => true) {
   requireConnection()
+  const owner = offlineUser()
   if (typeof indexedDB !== 'undefined' && (await operations(offlineUser())).length) {
     throw new Error('Sincroniza o revisa las capturas pendientes antes de descargar reportes.')
   }
+  const { error } = await supabase.rpc('autorizar_reporte_finca', { p_finca_id: farmId })
+    .abortSignal(AbortSignal.timeout(8000))
+  if (error) throw new Error(error.message)
+  if (owner !== offlineUser() || !isCurrent()) throw new Error('La sesión o finca cambió; vuelve a generar el reporte.')
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

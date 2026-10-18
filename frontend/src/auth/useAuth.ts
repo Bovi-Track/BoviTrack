@@ -5,6 +5,7 @@ export type AuthContextValue = {
   user: User | null
   loading: boolean
   passwordRecovery: boolean
+  accessError?: string | null
   clearPasswordRecovery: () => void
 }
 

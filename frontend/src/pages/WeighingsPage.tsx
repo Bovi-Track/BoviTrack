@@ -1,6 +1,6 @@
 import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { FileText, Plus, Scale, Search } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useFarm } from '../context/useFarm.ts'
@@ -26,7 +26,7 @@ const emptyForm = {
 // RF-UC05-01 y RF-UC06-02: coordina captura y consulta del historial de pesajes.
 export default function WeighingsPage() {
   const revision = useOfflineRevision()
-  const { activeFarm, loading } = useFarm()
+  const { activeFarm, role, loading } = useFarm()
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [rows, setRows] = useState<WeighingRow[]>([])
   const [loadedFarmId, setLoadedFarmId] = useState<string | null>(null)
@@ -35,6 +35,8 @@ export default function WeighingsPage() {
   const [form, setForm] = useState(emptyForm)
   const [submitting, setSubmitting] = useState(false)
   const [savingReport, setSavingReport] = useState(false)
+  const live = useRef(false)
+  useEffect(() => { live.current = true; return () => { live.current = false } }, [])
   const [error, setError] = useState('')
   const [toast, setToast] = useState<{
     message: string
@@ -99,7 +101,7 @@ export default function WeighingsPage() {
 
   // RF-TR-03 (parcial): descarga el PDF semanal construido con los pesajes cargados.
   async function saveWeeklyReport() {
-    if (!activeFarm) {
+    if (!activeFarm || role !== 'admin') {
       setToast({ message: 'Selecciona una finca activa desde Inicio.', tone: 'warn' })
       return
     }
@@ -111,7 +113,7 @@ export default function WeighingsPage() {
         bovines,
         weighings: rows,
       })
-      await saveReportPdf(blob, filename)
+      await saveReportPdf(blob, filename, activeFarm.id, () => live.current)
       setToast({ message: 'Elige la carpeta y guarda el PDF.', tone: 'ok' })
     } catch (cause) {
       if (isAbortError(cause)) return
@@ -194,7 +196,7 @@ export default function WeighingsPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
+          {role === 'admin' ? <button
             type="button"
             onClick={() => void saveWeeklyReport()}
             disabled={!activeFarm || loadedFarmId !== activeFarm.id || savingReport}
@@ -202,7 +204,7 @@ export default function WeighingsPage() {
           >
             <FileText className="size-4 text-bovi" />
             {savingReport ? 'Preparando…' : 'PDF semanal'}
-          </button>
+          </button> : null}
           <button
             type="button"
             onClick={() => {

@@ -81,7 +81,7 @@ export default function FarmManagePage() {
       <div className="space-y-5">
         {/* Informacion de la finca seleccionada*/}
         <InfoSection
-          key={activeFarm.id}
+          key={`${activeFarm.id}:info`}
           farmId={activeFarm.id}
           initialNombre={activeFarm.nombre}
           initialUbicacion={activeFarm.ubicacion ?? ''}
@@ -98,7 +98,7 @@ export default function FarmManagePage() {
 
         {/* Seccion de los miembros asociados */}
         <MembersSection
-          key={activeFarm.id}
+          key={`${activeFarm.id}:members`}
           farmId={activeFarm.id}
           currentUserId={user?.id}
           onToast={setToast}

@@ -130,6 +130,10 @@ export async function syncPending() {
           window.dispatchEvent(new Event('bovitrack:reauth'))
           break
         }
+        if (error.code === '42501' && error.message.includes('CUENTA_INACTIVA')) {
+          window.dispatchEvent(new Event('bovitrack:reauth'))
+          break
+        }
         const message = error.code === 'PGRST202'
           ? 'Falta aplicar el SQL de sincronización offline en Supabase.' : error.message
         await changeOperation(owner, op.id, message)

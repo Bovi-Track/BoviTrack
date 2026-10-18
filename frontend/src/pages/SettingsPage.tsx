@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.ts'
 import { useFarm } from '../context/useFarm.ts'
 import { roleLabel } from '../lib/farms.ts'
-import { supabase } from '../lib/supabase.ts'
+import { cerrarSesion } from '../auth/service.ts'
 import { useState } from 'react'
 import { clearOfflineUser, operations } from '../offline/store.ts'
 import { saveOfflineIdentity } from '../offline/identity.ts'
@@ -32,7 +32,7 @@ export default function SettingsPage() {
         await clearOfflineUser(user.id)
         saveOfflineIdentity(null)
       }, 'capture'))
-      const { error: logoutError } = await supabase.auth.signOut({ scope: 'local' })
+      const { error: logoutError } = await cerrarSesion()
       if (logoutError) throw logoutError
       navigate('/iniciar-sesion', { replace: true })
     } catch (cause) {

@@ -1,5 +1,6 @@
-import { validarPasswordRegistro } from './passwordPolicy.ts'
-import { supabase, setRememberMe } from './supabase.ts'
+import { validarPasswordRegistro } from '../lib/passwordPolicy.ts'
+import { supabase, setRememberMe } from '../lib/supabase.ts'
+import { INACTIVE_ACCOUNT, verifyActiveAccount } from './access.ts'
 
 // Identifica si el dato de inicio de sesión tiene formato de correo.
 export function looksLikeEmail(value: string) {
@@ -74,7 +75,21 @@ export async function iniciarSesion(
     }
   }
 
-  return supabase.auth.signInWithPassword({ email, password })
+  const result = await supabase.auth.signInWithPassword({ email, password })
+  if (result.error || !result.data.session) return result
+  try {
+    if (await verifyActiveAccount()) return result
+    await cerrarSesion()
+    return { data: { user: null, session: null }, error: { message: INACTIVE_ACCOUNT } }
+  } catch {
+    await cerrarSesion()
+    return { data: { user: null, session: null }, error: { message: 'No se pudo verificar el acceso. Revisa tu conexión e inténtalo de nuevo.' } }
+  }
+}
+
+// Cierra la sesión de este navegador sin cerrar las sesiones de otros dispositivos.
+export async function cerrarSesion() {
+  return supabase.auth.signOut({ scope: 'local' })
 }
 
 // Obtiene el origen de la aplicación para construir enlaces de autenticación.

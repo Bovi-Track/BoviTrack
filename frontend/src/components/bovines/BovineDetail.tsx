@@ -20,7 +20,6 @@ export function BullSanitaryDetail({
   onBack,
   onEdit,
   onRegister,
-  onRemove,
 }: {
   bovine: Bovine
   weighings: Weighing[]
@@ -28,9 +27,8 @@ export function BullSanitaryDetail({
   kindFilter: SanitaryKind | 'TODOS'
   onKindFilter: (value: SanitaryKind | 'TODOS') => void
   onBack: () => void
-  onEdit: () => void
+  onEdit?: () => void
   onRegister: (tipo: SanitaryKind) => void
-  onRemove: (id: string) => void
 }) {
   const [fichaView, setFichaView] = useState<'sanidad' | 'peso'>('peso')
   const history = [...records]
@@ -64,14 +62,14 @@ export function BullSanitaryDetail({
             {` · ${bovineStatusLabel(bovine.estado)}`}
           </p>
         </div>
-        <button
+        {onEdit ? <button
           type="button"
           onClick={onEdit}
           className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-cream"
         >
           <Pencil className="size-4 text-bovi" />
           Editar
-        </button>
+        </button> : null}
       </header>
 
       <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
@@ -166,7 +164,7 @@ export function BullSanitaryDetail({
             ) : (
               <ol className="space-y-4">
                 {history.map((item) => (
-                  <HistoryItem key={item.id} item={item} onRemove={onRemove} />
+                  <HistoryItem key={item.id} item={item} />
                 ))}
               </ol>
             )}
