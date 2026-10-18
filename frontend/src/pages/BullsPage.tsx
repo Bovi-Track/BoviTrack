@@ -9,6 +9,7 @@ import {
   updateBovine,
 } from '../lib/bovines.ts'
 import { BullSanitaryDetail } from '../components/bovines/BovineDetail.tsx'
+import { DisposalSection } from '../components/bovines/DisposalSection.tsx'
 import {
   kinds,
   kindById,
@@ -95,7 +96,7 @@ function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
   }
 }
 
-// RF-UC04-01, RF-UC07-01 y RF-UC07-02: coordina altas, ficha y plan sanitario del hato.
+// RF-UC04-01, RF-UC07-01/02 y RF-UC13-01: coordina altas, ficha, sanidad y bajas del hato.
 export default function BullsPage() {
   const revision = useOfflineRevision()
   const { activeFarm, role, loading } = useFarm()
@@ -180,7 +181,7 @@ export default function BullsPage() {
     )
   }, [bovines, query])
 
-  const selected = bovines.find((item) => item.id === selectedId) ?? null
+  const selected = bovines.find((item) => item.id === selectedId && item.finca_id === activeFarm?.id) ?? null
 
   const visibleRecords = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -376,6 +377,7 @@ export default function BullsPage() {
       {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
 
       {selected ? (
+        <>
         <BullSanitaryDetail
           bovine={selected}
           weighings={weighings.filter((item) => item.bovino_id === selected.id)}
@@ -389,6 +391,14 @@ export default function BullsPage() {
           onEdit={canManage ? openEdit : undefined}
           onRegister={(tipo) => openPlan(selected.id, tipo)}
         />
+        <DisposalSection
+          key={`${selected.id}:${role}`}
+          bovine={selected}
+          admin={role === 'admin'}
+          farmActive={Boolean(activeFarm?.activo)}
+          onRegistered={() => setBovines((rows) => rows.map((row) => row.id === selected.id ? { ...row, estado: 'BAJA' } : row))}
+        />
+        </>
       ) : (
         <>
           <header className="mb-5 flex items-start justify-between gap-3">
@@ -797,6 +807,7 @@ export default function BullsPage() {
             <select
               id="edit-estado"
               required
+              disabled={['VENDIDO', 'BAJA'].includes(editForm.estado)}
               value={editForm.estado}
               onChange={(event) =>
                 setEditForm((current) => ({
@@ -808,7 +819,7 @@ export default function BullsPage() {
             >
               <option value="ACTIVO">Activo</option>
               <option value="INACTIVO">Inactivo</option>
-              {['VENDIDO', 'BAJA', 'MUERTO'].includes(editForm.estado) ? <option value={editForm.estado}>{bovineStatusLabel(editForm.estado)}</option> : null}
+              {['VENDIDO', 'BAJA'].includes(editForm.estado) ? <option value={editForm.estado}>{bovineStatusLabel(editForm.estado)}</option> : null}
             </select>
           </Field>
           {editError ? (

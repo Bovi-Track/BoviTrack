@@ -26,7 +26,7 @@ export type Bovine = {
   raza: string | null
   color: string | null
   sexo: 'MACHO' | 'HEMBRA'
-  estado: 'ACTIVO' | 'INACTIVO' | 'VENDIDO' | 'BAJA' | 'MUERTO'
+  estado: 'ACTIVO' | 'INACTIVO' | 'VENDIDO' | 'BAJA'
 }
 
 export type BovineStatus = Bovine['estado']

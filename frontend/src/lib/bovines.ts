@@ -54,7 +54,7 @@ export async function createBovines(payloads: CreateBovineInput[]) {
   return (data ?? []) as Bovine[]
 }
 
-// RF-UC04-01 (parcial): actualiza la ficha; las transiciones de venta/baja siguen pendientes.
+// RF-UC04-01: actualiza la ficha; venta y baja utilizan sus propias RPC transaccionales.
 export async function updateBovine(id: string, patch: UpdateBovineInput) {
   requireConnection()
   const { data, error } = await supabase
@@ -78,7 +78,7 @@ export function bovineLabel(bovine: Pick<Bovine, 'nombre' | 'numero_diio' | 'ide
 }
 
 const statusLabels: Record<Bovine['estado'], string> = {
-  ACTIVO: 'Activo', INACTIVO: 'Inactivo', VENDIDO: 'Vendido', BAJA: 'Baja', MUERTO: 'Muerto',
+  ACTIVO: 'Activo', INACTIVO: 'Inactivo', VENDIDO: 'Vendido', BAJA: 'Baja',
 }
 
 // Traduce el estado del toro usando las mismas etiquetas en ficha, listas y PDF.
