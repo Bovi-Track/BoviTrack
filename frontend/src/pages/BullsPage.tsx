@@ -124,6 +124,7 @@ export default function BullsPage() {
   } | null>(null)
   const [view, setView] = useState<'hato' | 'sanidad'>('hato')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [traceRevision, setTraceRevision] = useState(0)
   const [records, setRecords] = useState<SanitaryRecord[]>([])
   const [kindFilter, setKindFilter] = useState<SanitaryKind | 'TODOS'>('TODOS')
   const [planOpen, setPlanOpen] = useState(false)
@@ -338,6 +339,7 @@ export default function BullsPage() {
       if (activeFarm) {
         const nextRecords = await loadSanitaryRecords(activeFarm.id)
         setRecords(nextRecords)
+        setTraceRevision((value) => value + 1)
       }
 
       setSelectedId(planForm.bovino_id)
@@ -374,6 +376,7 @@ export default function BullsPage() {
           records={records.filter((item) => item.bovino_id === selected.id)}
           kindFilter={kindFilter}
           onKindFilter={setKindFilter}
+          traceRefreshKey={revision + traceRevision}
           onBack={() => {
             setSelectedId(null)
             setKindFilter('TODOS')
@@ -386,12 +389,16 @@ export default function BullsPage() {
           bovine={selected}
           admin={role === 'admin'}
           farmActive={Boolean(activeFarm?.activo)}
-          onRegistered={() => setBovines((rows) => rows.map((row) => row.id === selected.id ? { ...row, estado: 'BAJA' } : row))}
+          onRegistered={() => {
+            setBovines((rows) => rows.map((row) => row.id === selected.id ? { ...row, estado: 'BAJA' } : row))
+            setTraceRevision((value) => value + 1)
+          }}
         />
         <BovineMovementSection
           key={`${selected.id}:movimientos:${role}`}
           bovine={selected}
           onRegistered={(result) => {
+            setTraceRevision((value) => value + 1)
             if (result.finca_id === activeFarm?.id) {
               setBovines((rows) => rows.map((row) => row.id === result.bovino_id ? { ...row, estado: result.estado } : row))
             } else {
