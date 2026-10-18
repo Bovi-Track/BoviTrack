@@ -15,12 +15,14 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AddBovineModal } from '../components/dashboard/AddBovineModal.tsx'
 import { CreateFarmModal } from '../components/dashboard/CreateFarmModal.tsx'
+import { Field, fieldClass } from '../components/dashboard/Modal.tsx'
 import { QuickWeighCard } from '../components/dashboard/QuickWeighCard.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useAuth } from '../auth/useAuth.ts'
 import { useFarm } from '../context/useFarm.ts'
 import { bovineLabel, createBovine, loadBovines } from '../lib/bovines.ts'
 import { computeMetrics, greetingForNow, saleHints } from '../lib/dashboard.ts'
+import { loadBovineAcquisitionCosts } from '../lib/sales.ts'
 import { loadTasks, updateTaskDone } from '../lib/tasks.ts'
 import { loadTreatments } from '../lib/sanitary.ts'
 import {
@@ -28,7 +30,12 @@ import {
   saveWeighing,
 } from '../lib/weighings.ts'
 import { roleLabel } from '../lib/farms.ts'
-import type { Bovine, SaleHint, Task, Treatment } from '../types/dashboard.ts'
+import type { Bovine, BovineAcquisitionCost, SaleHint, Task, Treatment, Weighing } from '../types/dashboard.ts'
+
+const saleCurrency = new Intl.NumberFormat('es-CR', {
+  style: 'currency', currency: 'CRC', minimumFractionDigits: 2, maximumFractionDigits: 2,
+})
+const saleUnit = new Intl.NumberFormat('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 // RF-UC03-01, RF-UC05-01 y RF-UC11-02: coordina el resumen y las capturas rápidas de la finca.
 export default function HomePage() {
@@ -42,7 +49,10 @@ export default function HomePage() {
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [treatments, setTreatments] = useState<Treatment[]>([])
-  const [hints, setHints] = useState<SaleHint[]>([])
+  const [weighings, setWeighings] = useState<Weighing[]>([])
+  const [acquisitionCosts, setAcquisitionCosts] = useState<BovineAcquisitionCost[]>([])
+  const [expectedSalePrice, setExpectedSalePrice] = useState('')
+  const [dailyMaintenance, setDailyMaintenance] = useState('')
   const [metrics, setMetrics] = useState({
     activeBulls: 0,
     averageGmd: null as number | null,
@@ -71,7 +81,8 @@ export default function HomePage() {
       setBovines([])
       setTasks([])
       setTreatments([])
-      setHints([])
+      setWeighings([])
+      setAcquisitionCosts([])
       setMetrics({ activeBulls: 0, averageGmd: null, weeklyGmd: null, pendingAlerts: 0 })
       return
     }
@@ -83,17 +94,19 @@ export default function HomePage() {
       try {
         const nextBovines = await loadBovines(farmId)
         const ids = nextBovines.map((item) => item.id)
-        const [weighings, nextTasks, nextTreatments] = await Promise.all([
+        const [nextWeighings, nextTasks, nextTreatments, nextCosts] = await Promise.all([
           loadWeighings(ids, farmId),
           loadTasks(farmId),
           loadTreatments(ids, farmId),
+          role === 'admin' ? loadBovineAcquisitionCosts(farmId) : Promise.resolve([]),
         ])
         if (!active) return
         setBovines(nextBovines)
         setTasks(nextTasks)
         setTreatments(nextTreatments)
-        setMetrics(computeMetrics(nextBovines, weighings, nextTreatments))
-        setHints(saleHints(nextBovines, weighings))
+        setWeighings(nextWeighings)
+        setAcquisitionCosts(nextCosts)
+        setMetrics(computeMetrics(nextBovines, nextWeighings, nextTreatments))
       } catch {
         if (!active) return
         setToast({
@@ -107,7 +120,14 @@ export default function HomePage() {
     return () => {
       active = false
     }
-  }, [activeFarm, user, revision])
+  }, [activeFarm, role, user, revision])
+
+  const salePrice = parseSaleAmount(expectedSalePrice, false)
+  const maintenance = parseSaleAmount(dailyMaintenance, true)
+  const hints = useMemo(() => saleHints(bovines, weighings, acquisitionCosts, {
+    expectedPricePerKg: salePrice,
+    maintenancePerDay: maintenance,
+  }), [acquisitionCosts, bovines, maintenance, salePrice, weighings])
 
   const todayTreatments = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -367,31 +387,81 @@ export default function HomePage() {
           </>
         ) : (
           <>
-            <Card title="Evaluación rápida de venta">
+            <Card title="Evaluación de venta">
+              <p className="mb-4 text-sm text-stone-500">
+                Compara el precio esperado con el punto de equilibrio actual. El GMD usa los pesajes de la ventana de 56 días y no proyecta pesos futuros.
+              </p>
+              <div className="mb-5 grid gap-3 sm:grid-cols-2">
+                <Field id="expected-sale-price" label="Precio esperado (CRC/kg)">
+                  <input
+                    id="expected-sale-price"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={expectedSalePrice}
+                    onChange={(event) => setExpectedSalePrice(event.target.value)}
+                    placeholder="Ej. 1 500"
+                    className={fieldClass}
+                  />
+                </Field>
+                <Field id="daily-maintenance" label="Mantenimiento diario por toro (CRC/día)">
+                  <input
+                    id="daily-maintenance"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={dailyMaintenance}
+                    onChange={(event) => setDailyMaintenance(event.target.value)}
+                    placeholder="Ej. 800"
+                    className={fieldClass}
+                  />
+                </Field>
+              </div>
               {hints.length === 0 ? (
                 <p className="text-sm text-stone-400">
-                  Agrega bovinos y pesajes para sugerir ventas.
+                  Agrega bovinos activos y pesajes para revisar su rentabilidad.
                 </p>
               ) : (
                 <ul className="space-y-2">
                   {hints.map((hint) => (
                     <li
                       key={hint.bovine.id}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-cream px-3 py-3"
+                      className="rounded-xl bg-cream px-3 py-3"
                     >
-                      <span>
-                        <span className="block text-sm font-medium text-stone-900">
-                          {bovineLabel(hint.bovine)}
-                        </span>
-                        <span className="text-xs text-stone-500">
-                          {hint.detail}
-                        </span>
-                      </span>
-                      <SaleBadge status={hint.status} />
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-stone-900">{bovineLabel(hint.bovine)}</span>
+                        <SaleBadge status={hint.status} />
+                      </div>
+                      <p className="mt-1 text-xs text-stone-500">{hint.detail}</p>
+                      {hint.status === 'rentable' || hint.status === 'no_rentable' ? (
+                        <div className="mt-3 space-y-3">
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-stone-600 sm:grid-cols-3">
+                            <span>Peso actual: <strong>{saleUnit.format(hint.currentWeight ?? 0)} kg</strong></span>
+                            <span>GMD 56 días: <strong>{hint.recentGmd == null ? '—' : `${saleUnit.format(hint.recentGmd)} kg/día`}</strong></span>
+                            <span>Pesajes válidos: <strong>{hint.weighings}/8+</strong></span>
+                            <span>Compra + flete: <strong>{saleCurrency.format(hint.acquisitionCost ?? 0)}</strong></span>
+                            <span>Mantenimiento acumulado: <strong>{saleCurrency.format(hint.maintenanceCost ?? 0)}</strong></span>
+                            <span>Costo acumulado: <strong>{saleCurrency.format(hint.accumulatedCost ?? 0)}</strong></span>
+                            <span>Equilibrio: <strong>{saleCurrency.format(hint.breakEvenPrice ?? 0)}/kg</strong></span>
+                            <span>Esperado: <strong>{saleCurrency.format(salePrice ?? 0)}/kg</strong></span>
+                            <span>Margen estimado hoy: <strong>{saleCurrency.format(hint.margin ?? 0)}</strong></span>
+                          </div>
+                          <SaleComparison
+                            costs={hint.accumulatedCost ?? 0}
+                            proceeds={hint.expectedRevenue ?? 0}
+                            label={bovineLabel(hint.bovine)}
+                          />
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
               )}
+              <p className="mt-4 text-xs text-stone-400">
+                La evaluación suma compra, flete y el mantenimiento ingresado. No distribuye costos de inventario o sanidad porque no están vinculados históricamente a cada toro.
+              </p>
             </Card>
             <div className="grid grid-cols-2 gap-2">
               <Shortcut
@@ -476,12 +546,14 @@ function Card({
   )
 }
 
-// Presenta el resultado de la sugerencia heredada de venta con su estado visual.
+// Presenta el resultado económico calculado para las condiciones actuales.
 function SaleBadge({ status }: { status: SaleHint['status'] }) {
   const map = {
-    apto: { label: 'Apto para venta', className: 'bg-bovi text-white' },
-    falta: { label: 'Falta información', className: 'bg-amber-100 text-amber-800' },
-    mantener: { label: 'Mantener', className: 'bg-stone-200 text-stone-700' },
+    falta_pesajes: { label: 'Faltan pesajes', className: 'bg-amber-100 text-amber-800' },
+    falta_parametros: { label: 'Completa los parámetros', className: 'bg-amber-100 text-amber-800' },
+    falta_costos: { label: 'Faltan costos de compra', className: 'bg-amber-100 text-amber-800' },
+    rentable: { label: 'Rentable hoy', className: 'bg-bovi text-white' },
+    no_rentable: { label: 'No rentable hoy', className: 'bg-rose-100 text-rose-800' },
   }
   const item = map[status]
   return (
@@ -491,6 +563,37 @@ function SaleBadge({ status }: { status: SaleHint['status'] }) {
       {item.label}
     </span>
   )
+}
+
+// Compara gráficamente los ingresos brutos estimados hoy con los costos acumulados.
+function SaleComparison({ costs, proceeds, label }: { costs: number; proceeds: number; label: string }) {
+  const scale = Math.max(costs, proceeds, 1)
+  const bars = [
+    { label: 'Costos acumulados', value: costs, color: 'bg-stone-400' },
+    { label: 'Ingreso al precio esperado', value: proceeds, color: 'bg-bovi' },
+  ]
+  return (
+    <div role="img" aria-label={`Comparación para ${label}: costos ${saleCurrency.format(costs)}, ingreso esperado ${saleCurrency.format(proceeds)}`} className="space-y-2">
+      {bars.map((bar) => (
+        <div key={bar.label}>
+          <div className="mb-1 flex justify-between gap-2 text-[11px] text-stone-500">
+            <span>{bar.label}</span><span>{saleCurrency.format(bar.value)}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-stone-200">
+            <div className={`h-full rounded-full ${bar.color}`} style={{ width: `${Math.max(bar.value / scale * 100, 1)}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Convierte campos numéricos vacíos o inválidos en null para no activar evaluaciones parciales.
+function parseSaleAmount(value: string, allowZero: boolean) {
+  if (value.trim() === '') return null
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount === 0)) return null
+  return amount
 }
 
 // Presenta un enlace de acceso a otro módulo de la aplicación.

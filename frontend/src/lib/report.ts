@@ -67,7 +67,7 @@ export const REPORT_SECTIONS: ReportSection[] = [
   {
     id: 'venta',
     label: 'Evaluación de venta',
-    description: 'Sugerencias de venta según peso y GMD.',
+    description: 'Pesajes disponibles para evaluar la venta.',
   },
 ]
 
@@ -112,9 +112,11 @@ function formatDateTime(iso: string) {
 
 // Traduce la sugerencia heredada de venta a su etiqueta del PDF.
 function saleLabel(status: SaleHint['status']) {
-  if (status === 'apto') return 'Apto para venta'
-  if (status === 'falta') return 'Falta información'
-  return 'Mantener'
+  if (status === 'rentable') return 'Rentable hoy'
+  if (status === 'no_rentable') return 'No rentable hoy'
+  if (status === 'falta_costos') return 'Faltan costos'
+  if (status === 'falta_parametros') return 'Faltan parámetros'
+  return 'Faltan pesajes'
 }
 
 // Obtiene la posición final de la última tabla para continuar el documento.
@@ -563,7 +565,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   }
 
   if (selection.venta) {
-    y = addHeading(doc, y, 'Evaluación de venta')
+    y = addHeading(doc, y, 'Datos para evaluar venta')
     addTable(
       doc,
       y,

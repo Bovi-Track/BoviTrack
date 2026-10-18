@@ -19,6 +19,7 @@ export type FarmMember = {
 export type Bovine = {
   id: string
   finca_id: string
+  fecha_ingreso?: string
   numero_diio: string | null
   identificador_interno: string
   nombre: string | null
@@ -81,6 +82,8 @@ export type Weighing = {
   bovino_id: string
   peso_kg: number
   fecha_pesaje: string
+  es_inicial?: boolean
+  created_at?: string
 }
 
 export type PendingWeighing = {
@@ -91,8 +94,24 @@ export type PendingWeighing = {
 
 export type SaleHint = {
   bovine: Bovine
-  status: 'apto' | 'falta' | 'mantener'
+  status: 'falta_pesajes' | 'falta_parametros' | 'falta_costos' | 'rentable' | 'no_rentable'
   detail: string
+  weighings: number
+  currentWeight?: number
+  recentGmd?: number | null
+  acquisitionCost?: number
+  maintenanceCost?: number
+  accumulatedCost?: number
+  expectedRevenue?: number
+  margin?: number
+  breakEvenPrice?: number
+}
+
+export type BovineAcquisitionCost = {
+  id: string
+  compra_id: string | null
+  precio_compra_kilo: number | null
+  costo_flete_asignado: number
 }
 
 export type DashboardMetrics = {
