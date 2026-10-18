@@ -1,3 +1,4 @@
+import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { SegmentButton } from '../components/dashboard/SegmentButton.tsx'
 import { formatDayLong, todayIso } from '../lib/dates.ts'
 import { ClipboardList, Plus, Search } from 'lucide-react'
@@ -19,6 +20,7 @@ const emptyForm = {
 
 // RF-UC11-01 y RF-UC11-02 (parcial): coordina consulta, asignación y estado de tareas.
 export default function TasksPage() {
+  const revision = useOfflineRevision()
   const { user } = useAuth()
   const { activeFarm, role, loading } = useFarm()
   const [members, setMembers] = useState<FarmMember[]>([])
@@ -57,7 +59,7 @@ export default function TasksPage() {
     async function loadData() {
       try {
         const [membersData, tasksData] = await Promise.all([
-          loadFarmMembers(farmId),
+          navigator.onLine ? loadFarmMembers(farmId) : Promise.resolve([]),
           loadTasks(farmId)
         ])
         if (active) {
@@ -76,7 +78,7 @@ export default function TasksPage() {
     return () => {
       active = false
     }
-  }, [activeFarm])
+  }, [activeFarm, revision])
 
   const people = useMemo(() => {
     const list = [...members]
@@ -160,7 +162,7 @@ export default function TasksPage() {
   async function toggle(task: Task) {
     const nextStatus = task.estado === 'COMPLETADA' ? false : true
     try {
-      await updateTaskDone(task.id, nextStatus)
+      await updateTaskDone(task.id, nextStatus, activeFarm!.id)
       setTasks((current) =>
         current.map((item) =>
           item.id === task.id
@@ -171,6 +173,7 @@ export default function TasksPage() {
             : item,
         ),
       )
+      setToast('Cambio guardado en el dispositivo; pendiente de sincronizar.')
     } catch {
       setToast('No se pudo actualizar la tarea.')
     }

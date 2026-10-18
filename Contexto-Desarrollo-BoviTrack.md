@@ -1,6 +1,6 @@
 # Contexto de desarrollo de BoviTrack
 
-Actualizado: 2026-10-12.
+Actualizado: 2026-10-18.
 
 Este documento define el propósito, la arquitectura, los actores y las reglas del proyecto. Los requisitos funcionales, sus porcentajes y pendientes se mantienen en [bitacora.md](bitacora.md).
 
@@ -17,7 +17,7 @@ Un usuario puede tener un rol distinto en cada finca. La sesión autenticada no 
 
 ## 2. Arquitectura vigente
 
-- **Frontend:** React, TypeScript y Vite, con Tailwind CSS. Interfaz móvil y de escritorio; Cloudflare Pages es el despliegue previsto. La capacidad PWA/offline todavía debe completarse.
+- **Frontend:** React, TypeScript y Vite, con Tailwind CSS. Interfaz móvil y de escritorio; Cloudflare Pages es el despliegue previsto. El build incluye Service Worker y caché de aplicación; la aceptación offline en Supabase y otros navegadores sigue pendiente.
 - **Autenticación:** Supabase Auth administra credenciales, sesión y JWT. El cliente compartido está en `frontend/src/lib/supabase.ts`; `AuthProvider` expone el usuario y `FarmContext` la finca y sus roles. El manejo de sesión entre módulos todavía necesita estandarización.
 - **Datos y operaciones:** React usa `supabase-js` para consultas autorizadas y RPC SQL en Supabase. Las reglas de acceso y consistencia deben aplicarse centralmente con RLS, permisos y RPC; los controles visuales solo adaptan la interfaz.
 - **Transacciones:** las operaciones que necesitan consistencia entre varios registros o validación de saldo se resuelven mediante RPC. Las funciones privilegiadas deben validar usuario, cuenta activa, rol y finca, y usar referencias calificadas y `search_path` seguro. En inventario, el acceso a las tablas se realiza exclusivamente mediante sus RPC.
@@ -57,17 +57,21 @@ El catálogo, movimientos e historial de inventario están implementados. Su SQL
 
 La evaluación económica completa de venta, el registro de ventas/bajas y la trazabilidad unificada todavía requieren desarrollo. El periodo de bodega no filtra las otras secciones del PDF.
 
-La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La estandarización completa de sesión/permisos y la capa offline siguen pendientes.
+La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La estandarización completa de sesión/permisos sigue pendiente. La capa offline compartida está implementada con IndexedDB y su SQL ya está aplicado en Supabase. La aceptación con administrador real pasó en Chromium; los otros roles y navegadores siguen pendientes.
 
-## 5. Operación offline prevista
+## 5. Operación offline
 
 Solo se permite capturar sin conexión **pesajes, aplicaciones sanitarias, movimientos de inventario y actualizaciones de tareas**. Las funciones administrativas, los reportes y las consultas centrales actualizadas requieren conexión.
 
-El diseño previsto utiliza Service Worker y caché de aplicación/datos para reabrir la PWA sin conexión, y PGlite sobre IndexedDB para los datos operativos y la cola persistente. Actualmente solo hay una cola de pesajes en `localStorage`; no existe aún la capa offline completa.
+La implementación utiliza Service Worker para los archivos del build e IndexedDB directo para dos almacenes: datos operativos y cola de capturas. Se eligió IndexedDB para mantener la solución simple; no se utiliza PGlite. `frontend/src/offline/runtime.ts` conecta los servicios existentes con la caché y el sincronizador compartido, sin interceptar globalmente las peticiones HTTP.
 
-Cada operación debe conservar su usuario, finca, identificador único y estado pendiente. Al recuperar conexión o reabrir la aplicación, se sincroniza con Supabase mediante una operación central que valide sesión, permisos y datos, y procese ese identificador de forma idempotente. Una operación ya procesada debe confirmarse sin duplicarla.
+Se debe abrir la aplicación con conexión y esperar la preparación de datos de la finca seleccionada antes de salir al campo. La identidad previamente autenticada permite reabrir esos datos offline; se respeta Recordarme. No se permite un primer inicio de sesión sin conexión. El Service Worker se instala en builds de producción, no en `npm run dev`.
 
-La captura local solo se marca sincronizada después de recibir confirmación central. Los fallos conservan la operación para reintentar; una sesión inválida exige autenticación antes de sincronizar. Al cerrar completamente sesión se limpian sus datos locales, sin mezclarlos con los de otro usuario.
+Cada captura conserva usuario, finca, identificador único y estado pendiente o rechazado. El sincronizador funciona desde todas las pantallas al recuperar conexión, al abrir/enfocar la aplicación y mediante reintentos mientras está abierta. La RPC `procesar_operacion_offline` valida cuenta, rol, finca y datos, y registra la operación y su confirmación en una transacción. Un reintento devuelve la confirmación original. `frontend/sql/rf_tr02_offline.sql` ya fue aplicado, con RLS en la tabla privada y permisos directos revocados.
+
+El guardado local se distingue de la confirmación central. Los fallos de red conservan el pendiente; los rechazos quedan visibles para revisión y bloquean la cola hasta resolverlos. Una sesión inválida solicita autenticación sin borrar las capturas. Se impide cerrar sesión con capturas sin resolver; al cerrarla se limpian las copias del usuario. Los saldos offline son provisionales: Supabase puede rechazar movimientos por cambios concurrentes.
+
+La cola antigua de pesajes en `localStorage` se conserva sin enviarla automáticamente, porque no identifica a su propietario. Debe revisarse manualmente. Las pruebas locales están en `frontend/tests/offline-browser.py` y `frontend/tests/offline-sql.py`; `frontend/tests/offline-live.py` prueba contra Supabase real. Pasaron 49 comprobaciones con administrador, incluyendo las cuatro capturas, reconexión, reintentos, concurrencia, sesión inválida y contenido del PDF. La prueba usa una finca QA aislada y conserva su historial al desactivarla. Quedan pendientes personal de campo, cuenta inactiva/no miembro y Safari/Firefox.
 
 ## 6. Reglas de negocio
 

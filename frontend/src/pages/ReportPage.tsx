@@ -1,3 +1,4 @@
+import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { FileText, Save } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -37,6 +38,7 @@ export default function ReportPage() {
 
 // RF-TR-03 (parcial): coordina selección de secciones, periodo de bodega y descarga.
 function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; canInventory: boolean }) {
+  const revision = useOfflineRevision()
   const [selection, setSelection] = useState<ReportSelection>(defaultReportSelection)
   const [desde, setDesde] = useState(() => `${todayIso().slice(0, 7)}-01`)
   const [hasta, setHasta] = useState(todayIso)
@@ -74,8 +76,8 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
         const nextBovines = await loadBovines(capturedFarmId)
         const ids = nextBovines.map((item) => item.id)
         const [nextWeighings, nextTreatments] = await Promise.all([
-          loadWeighings(ids),
-          loadTreatments(ids),
+          loadWeighings(ids, capturedFarmId),
+          loadTreatments(ids, capturedFarmId),
         ])
         if (!active) return
         setBovines(nextBovines)
@@ -96,7 +98,7 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
     return () => {
       active = false
     }
-  }, [farmId])
+  }, [farmId, revision])
 
   const effectiveSelection = { ...selection, inventario: canInventory && selection.inventario }
   const selectedCount = selectedSectionCount(effectiveSelection)

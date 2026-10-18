@@ -1,3 +1,4 @@
+import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import {
   Activity,
   AlertTriangle,
@@ -9,8 +10,6 @@ import {
   Plus,
   ShoppingBag,
   Warehouse,
-  Wifi,
-  WifiOff,
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -26,24 +25,20 @@ import { loadTasks, updateTaskDone } from '../lib/tasks.ts'
 import { loadTreatments } from '../lib/sanitary.ts'
 import {
   loadWeighings,
-  readPendingWeighings,
   saveWeighing,
-  writePendingWeighings,
 } from '../lib/weighings.ts'
 import { roleLabel } from '../lib/farms.ts'
 import type { Bovine, SaleHint, Task, Treatment } from '../types/dashboard.ts'
 
 // RF-UC03-01, RF-UC05-01 y RF-UC11-02: coordina el resumen y las capturas rápidas de la finca.
 export default function HomePage() {
+  const revision = useOfflineRevision()
   const { user } = useAuth()
   const { farms, activeFarm, role, loading, setActiveFarmId, createAndSelectFarm } =
     useFarm()
   const [farmOpen, setFarmOpen] = useState(false)
   const [createFarmOpen, setCreateFarmOpen] = useState(false)
   const [addBovineOpen, setAddBovineOpen] = useState(false)
-  const [online, setOnline] = useState(
-    typeof navigator === 'undefined' ? true : navigator.onLine,
-  )
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [treatments, setTreatments] = useState<Treatment[]>([])
@@ -64,23 +59,6 @@ export default function HomePage() {
       user.user_metadata.nombre_completo) ||
     user?.email ||
     'productor'
-
-  useEffect(() => {
-    // Actualiza el indicador de conexión para habilitar los reintentos de pesajes.
-    function onOnline() {
-      setOnline(true)
-    }
-    // Actualiza el indicador de conexión para conservar capturas pendientes.
-    function onOffline() {
-      setOnline(false)
-    }
-    window.addEventListener('online', onOnline)
-    window.addEventListener('offline', onOffline)
-    return () => {
-      window.removeEventListener('online', onOnline)
-      window.removeEventListener('offline', onOffline)
-    }
-  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -106,9 +84,9 @@ export default function HomePage() {
         const nextBovines = await loadBovines(farmId)
         const ids = nextBovines.map((item) => item.id)
         const [weighings, nextTasks, nextTreatments] = await Promise.all([
-          loadWeighings(ids),
+          loadWeighings(ids, farmId),
           loadTasks(farmId),
-          loadTreatments(ids),
+          loadTreatments(ids, farmId),
         ])
         if (!active) return
         setBovines(nextBovines)
@@ -129,32 +107,7 @@ export default function HomePage() {
     return () => {
       active = false
     }
-  }, [activeFarm, user])
-
-  useEffect(() => {
-    if (!online || !user) return
-    const pending = readPendingWeighings()
-    if (pending.length === 0) return
-    const userId = user.id
-
-    // RF-TR-02 (parcial): reintenta la cola heredada de pesajes cuando Inicio está conectado.
-    async function flush() {
-      const remaining = []
-      for (const item of pending) {
-        try {
-          await saveWeighing(item, userId)
-        } catch {
-          remaining.push(item)
-        }
-      }
-      writePendingWeighings(remaining)
-      if (remaining.length < pending.length) {
-        setToast({ message: 'Pesajes locales sincronizados', tone: 'ok' })
-      }
-    }
-
-    void flush()
-  }, [online, user])
+  }, [activeFarm, user, revision])
 
   const todayTreatments = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -184,41 +137,29 @@ export default function HomePage() {
     setToast({ message: 'Bovino guardado en la finca activa', tone: 'ok' })
   }
 
-  // RF-UC05-01 y RF-TR-01 (parcial): guarda el pesaje online o en la cola heredada.
+  // RF-UC05-01 y RF-TR-01: captura el pesaje mediante la cola compartida.
   async function handleSaveWeighing(payload: {
     bovino_id: string
     peso_kg: number
     fecha_pesaje: string
   }) {
-    if (!online) {
-      writePendingWeighings([...readPendingWeighings(), payload])
-      setToast({ message: 'Guardado local. Se sincronizará al volver online.', tone: 'warn' })
-      return
-    }
-
+    if (!activeFarm) throw new Error('Selecciona una finca primero.')
     try {
-      await saveWeighing(payload, user?.id)
-      setToast({ message: 'Pesaje guardado y sincronizado', tone: 'ok' })
-    } catch {
-      writePendingWeighings([...readPendingWeighings(), payload])
-      setToast({
-        message: 'Sin conexión al servidor. Pesaje guardado localmente.',
-        tone: 'warn',
-      })
+      await saveWeighing(payload, activeFarm.id)
+      setToast({ message: 'Pesaje guardado en el dispositivo; pendiente de sincronizar.', tone: 'warn' })
+    } catch (cause) {
+      setToast({ message: cause instanceof Error ? cause.message : 'No se pudo guardar el pesaje.', tone: 'error' })
+      throw cause
     }
   }
 
   // RF-UC11-02: solicita cambiar el estado de la tarea y actualiza la lista de Inicio.
   async function toggleTask(task: Task, done: boolean) {
-    setTasks((current) =>
-      current.map((item) =>
-        item.id === task.id
-          ? { ...item, estado: done ? 'COMPLETADA' : 'PENDIENTE' }
-          : item,
-      ),
-    )
+    if (!activeFarm) return
     try {
-      await updateTaskDone(task.id, done)
+      await updateTaskDone(task.id, done, activeFarm.id)
+      setTasks((current) => current.map((item) => item.id === task.id
+        ? { ...item, estado: done ? 'COMPLETADA' : 'PENDIENTE' } : item))
     } catch {
       setToast({ message: 'No se pudo actualizar la tarea', tone: 'error' })
     }
@@ -238,19 +179,7 @@ export default function HomePage() {
               GANADERÍA & CAMPO
             </p>
           </div>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${online
-              ? 'bg-bovi/10 text-bovi'
-              : 'bg-amber-100 text-amber-800'
-              }`}
-          >
-            {online ? (
-              <Wifi className="size-3.5" />
-            ) : (
-              <WifiOff className="size-3.5" />
-            )}
-            {online ? 'Online · Sincronizado' : 'Offline'}
-          </span>
+
         </div>
 
         <h1 className="font-serif text-3xl leading-tight font-semibold text-stone-900">

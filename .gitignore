@@ -44,3 +44,5 @@ supabase/migrations
 *.njsproj
 *.sln
 *.sw?
+
+frontend/tests

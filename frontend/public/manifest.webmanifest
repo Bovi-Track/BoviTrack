@@ -1,0 +1,11 @@
+{
+  "name": "BoviTrack",
+  "short_name": "BoviTrack",
+  "lang": "es",
+  "start_url": "/inicio",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf7f0",
+  "theme_color": "#234938",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

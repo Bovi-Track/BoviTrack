@@ -1,4 +1,5 @@
 import { supabase } from './supabase.ts'
+import { cachedRead, requireConnection } from '../offline/runtime.ts'
 import type { Bovine, CreateBovineInput, UpdateBovineInput } from '../types/dashboard.ts'
 
 const BOVINE_COLUMNS =
@@ -16,11 +17,18 @@ export function bovineErrorMessage(cause: unknown) {
 
 // RF-UC04-01: consulta los toros de una finca con sus datos básicos y estado.
 export async function loadBovines(farmId: string) {
+  return cachedRead(`bovines:${farmId}`, farmId, () => fetchBovines(farmId))
+}
+
+// Obtiene los toros de Supabase para actualizar la copia de la finca.
+async function fetchBovines(farmId: string) {
   const { data, error } = await supabase
     .from('bovino')
     .select(BOVINE_COLUMNS)
     .eq('finca_id', farmId)
     .order('created_at', { ascending: false })
+    .retry(false)
+    .abortSignal(AbortSignal.timeout(8000))
 
   if (error) throw error
   return (data ?? []) as Bovine[]
@@ -36,6 +44,7 @@ export async function createBovine(payload: CreateBovineInput) {
 // RF-UC04-01 y RF-UC03-02 (parcial): da de alta toros vinculados a su finca inicial.
 // El retiro, traslado y su historial todavía requieren sus propios flujos.
 export async function createBovines(payloads: CreateBovineInput[]) {
+  requireConnection()
   const { data, error } = await supabase
     .from('bovino')
     .insert(payloads)
@@ -47,6 +56,7 @@ export async function createBovines(payloads: CreateBovineInput[]) {
 
 // RF-UC04-01 (parcial): actualiza la ficha; las transiciones de venta/baja siguen pendientes.
 export async function updateBovine(id: string, patch: UpdateBovineInput) {
+  requireConnection()
   const { data, error } = await supabase
     .from('bovino')
     .update(patch)

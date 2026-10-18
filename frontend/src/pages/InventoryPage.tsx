@@ -1,5 +1,6 @@
+import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { Plus, Warehouse } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/useAuth.ts'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
@@ -49,6 +50,7 @@ export default function InventoryPage() {
 
 // RF-UC08-01, RF-UC09-01 y RF-UC09-02: coordina catálogo, movimientos e historial por finca.
 function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
+  const revision = useOfflineRevision()
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -68,7 +70,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
   const historyRequest = useRef(0)
   const catalogRequest = useRef(0)
   const submitting = useRef(false)
-  const canAdmin = role === 'admin' && farm.activo
+  const canAdmin = role === 'admin' && farm.activo && navigator.onLine
   const canMove = (role === 'admin' || role === 'campo') && farm.activo
   const selected = items.find((i) => i.id === selectedId)
 
@@ -82,7 +84,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
       if (active && request === catalogRequest.current) setLoadError(inventoryErrorMessage(cause))
     }).finally(() => { if (active && request === catalogRequest.current) setLoading(false) })
     return () => { active = false; live.current = false }
-  }, [farm.id])
+  }, [farm.id, revision])
 
   useEffect(() => {
     if (!toast) return
@@ -105,28 +107,31 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
   }
 
   // Carga una página de historial y descarta respuestas de otro insumo o solicitud.
-  async function fetchHistory(itemId: string, offset: number) {
+  const fetchHistory = useCallback((itemId: string, offset: number) => {
     const request = ++historyRequest.current
-    setHistoryLoading(true)
-    setHistoryError(null)
-    try {
-      const page = await loadInventoryMovements(itemId, offset)
+    return loadInventoryMovements(itemId, offset, farm.id).then((page) => {
       if (!live.current || request !== historyRequest.current) return
       setHistory((current) => offset === 0 ? page.movimientos : [...current, ...page.movimientos])
       setTotal(page.total)
-    } catch (cause) {
+      setHistoryError(null)
+    }).catch((cause: unknown) => {
       if (live.current && request === historyRequest.current) setHistoryError(inventoryErrorMessage(cause))
-    } finally {
+    }).finally(() => {
       if (live.current && request === historyRequest.current) setHistoryLoading(false)
-    }
-  }
+    })
+  }, [farm.id])
+
+  useEffect(() => {
+    if (selectedId) void fetchHistory(selectedId, 0)
+  }, [selectedId, revision, fetchHistory])
 
   // Selecciona un insumo y reinicia su historial antes de consultar la primera página.
   function select(item: InventoryItem) {
+    setHistoryLoading(true)
+    setHistoryError(null)
     setSelectedId(item.id)
     setHistory([])
     setTotal(0)
-    void fetchHistory(item.id, 0)
   }
 
   // Inicializa el formulario correspondiente al alta, edición, movimiento o desactivación.
@@ -152,14 +157,14 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
       } else if (target.kind === 'deactivate') {
         confirmed = await deactivateInventoryItem(target.item.id)
       } else {
-        const result = await registerInventoryMovement(target.item.id, capture)
-        confirmed = { ...target.item, stock: result.stock }
+        const result = await registerInventoryMovement(target.item.id, capture, farm.id, target.item.stock)
+        confirmed = { ...target.item, stock: result.data.stock }
       }
       if (!live.current) return
       setItems((current) => current.some((i) => i.id === confirmed.id)
         ? current.map((i) => i.id === confirmed.id ? confirmed : i) : [...current, confirmed])
       setDialog(null)
-      setToast(target.kind === 'movement' ? 'Movimiento confirmado.' : target.kind === 'deactivate' ? 'Insumo desactivado; su historial se conserva.' : 'Insumo guardado.')
+      setToast(target.kind === 'movement' ? 'Movimiento guardado en el dispositivo; pendiente de sincronizar.' : target.kind === 'deactivate' ? 'Insumo desactivado; su historial se conserva.' : 'Insumo guardado.')
       if (target.kind === 'movement' && selectedId === target.item.id) {
         setHistory([])
         setTotal(0)
@@ -234,7 +239,7 @@ function FarmInventory({ farm, role }: { farm: Farm; role: FarmRole }) {
               <Field id="mov-cantidad" label={`Cantidad a ${addsStock ? 'sumar' : 'restar'} (${dialog.item.unidad_medida})`}><input id="mov-cantidad" type="number" required min="0.01" max="99999999.99" step="0.01" value={capture.cantidad} onChange={(e) => setCapture({ ...capture, cantidad: e.target.value })} className={fieldClass} /></Field>
               <Field id="mov-fecha" label="Fecha del movimiento"><input id="mov-fecha" type="date" required value={capture.fecha} onChange={(e) => setCapture({ ...capture, fecha: e.target.value })} className={fieldClass} /></Field>
               <Field id="mov-observaciones" label="Observaciones (opcional)"><textarea id="mov-observaciones" rows={3} value={capture.observaciones} onChange={(e) => setCapture({ ...capture, observaciones: e.target.value })} className={fieldClass} /></Field>
-              <p className="text-xs text-stone-500">Requiere conexión. Si no recibes confirmación, actualiza el historial antes de repetir la captura.</p>
+              <p className="text-xs text-stone-500">Se guarda en este dispositivo y se confirma al sincronizar. El saldo puede cambiar si existen movimientos de otros usuarios.</p>
             </> : <p className="text-sm text-stone-600">Se conserva el historial y el saldo. Este insumo dejará de admitir movimientos.</p>}
             {saveError ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{saveError}</p> : null}
             <button type="submit" disabled={saving || !farm.activo} className={`${primaryClass} w-full`}>{saving ? 'Confirmando…' : dialog?.kind === 'movement' ? 'Guardar movimiento' : dialog?.kind === 'deactivate' ? 'Confirmar desactivación' : 'Guardar insumo'}</button>

@@ -1,16 +1,14 @@
+import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { FileText, Plus, Scale, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useAuth } from '../auth/useAuth.ts'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useFarm } from '../context/useFarm.ts'
 import { bovineLabel, loadBovines } from '../lib/bovines.ts'
 import {
   loadWeighings,
-  readPendingWeighings,
   saveWeighing,
   weighingErrorMessage,
-  writePendingWeighings,
 } from '../lib/weighings.ts'
 import { todayIso } from '../lib/dates.ts'
 import { buildWeeklyReportPdf, isAbortError, saveReportPdf } from '../lib/report.ts'
@@ -27,10 +25,11 @@ const emptyForm = {
 
 // RF-UC05-01 y RF-UC06-02: coordina captura y consulta del historial de pesajes.
 export default function WeighingsPage() {
-  const { user } = useAuth()
+  const revision = useOfflineRevision()
   const { activeFarm, loading } = useFarm()
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [rows, setRows] = useState<WeighingRow[]>([])
+  const [loadedFarmId, setLoadedFarmId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -60,7 +59,7 @@ export default function WeighingsPage() {
     async function load() {
       try {
         const nextBovines = await loadBovines(farmId)
-        const weighings = await loadWeighings(nextBovines.map((item) => item.id))
+        const weighings = await loadWeighings(nextBovines.map((item) => item.id), farmId)
         if (!active) return
         const byId = new Map(nextBovines.map((item) => [item.id, item]))
         setBovines(nextBovines)
@@ -69,8 +68,10 @@ export default function WeighingsPage() {
             .reverse()
             .map((item) => ({ ...item, bovine: byId.get(item.bovino_id) })),
         )
+        setLoadedFarmId(farmId)
       } catch {
         if (active) {
+          setLoadedFarmId(null)
           setToast({
             message: 'No se pudieron cargar los pesajes.',
             tone: 'error',
@@ -82,7 +83,7 @@ export default function WeighingsPage() {
     return () => {
       active = false
     }
-  }, [activeFarm])
+  }, [activeFarm, revision])
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -102,6 +103,7 @@ export default function WeighingsPage() {
       setToast({ message: 'Selecciona una finca activa desde Inicio.', tone: 'warn' })
       return
     }
+    if (loadedFarmId !== activeFarm.id) return
     setSavingReport(true)
     try {
       const { blob, filename } = buildWeeklyReportPdf({
@@ -134,7 +136,7 @@ export default function WeighingsPage() {
     setRows((current) => [{ ...payload, bovine }, ...current])
   }
 
-  // RF-UC05-01 y RF-TR-01 (parcial): valida el pesaje y guarda online o en la cola heredada.
+  // RF-UC05-01 y RF-TR-01: valida el pesaje y lo entrega a la cola compartida.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const peso = Number(form.peso_kg)
@@ -156,26 +158,12 @@ export default function WeighingsPage() {
     setError('')
     setSubmitting(true)
     try {
-      if (!navigator.onLine) {
-        writePendingWeighings([...readPendingWeighings(), payload])
-        addRow({
-          id: crypto.randomUUID(),
-          ...payload,
-        })
-        setOpen(false)
-        setForm({ ...emptyForm, fecha_pesaje: todayIso() })
-        setToast({
-          message: 'Guardado local. Se sincronizará al volver online.',
-          tone: 'warn',
-        })
-        return
-      }
-
-      const saved = await saveWeighing(payload, user?.id)
-      addRow(saved)
+      if (!activeFarm) throw new Error('Selecciona una finca primero.')
+      const saved = await saveWeighing(payload, activeFarm.id)
+      addRow(saved.data)
       setOpen(false)
       setForm({ ...emptyForm, fecha_pesaje: todayIso() })
-      setToast({ message: 'Pesaje guardado en la finca.', tone: 'ok' })
+      setToast({ message: 'Pesaje guardado en el dispositivo; pendiente de sincronizar.', tone: 'warn' })
     } catch (cause) {
       setError(weighingErrorMessage(cause))
     } finally {
@@ -209,7 +197,7 @@ export default function WeighingsPage() {
           <button
             type="button"
             onClick={() => void saveWeeklyReport()}
-            disabled={!activeFarm || savingReport}
+            disabled={!activeFarm || loadedFarmId !== activeFarm.id || savingReport}
             className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-stone-800 transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FileText className="size-4 text-bovi" />

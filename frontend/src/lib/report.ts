@@ -1,3 +1,5 @@
+import { offlineUser, requireConnection } from '../offline/runtime.ts'
+import { operations } from '../offline/store.ts'
 import autoTable from 'jspdf-autotable'
 import { bovineStatusLabel, bovineLabel } from './bovines.ts'
 import { formatDate, formatDayLong } from './dates.ts'
@@ -597,6 +599,10 @@ function isAbortError(cause: unknown) {
 
 // RF-TR-03: inicia la descarga en el navegador de un PDF ya generado.
 export async function saveReportPdf(blob: Blob, filename: string) {
+  requireConnection()
+  if (typeof indexedDB !== 'undefined' && (await operations(offlineUser())).length) {
+    throw new Error('Sincroniza o revisa las capturas pendientes antes de descargar reportes.')
+  }
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
