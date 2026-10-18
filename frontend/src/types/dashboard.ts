@@ -114,6 +114,37 @@ export type BovineAcquisitionCost = {
   costo_flete_asignado: number
 }
 
+export type SaleRecord = {
+  id: string
+  bovino_id: string
+  identificador_interno: string
+  nombre: string | null
+  fecha_venta: string
+  peso_salida_kg: number
+  precio_kilo: number
+  comprador_canal: string
+  rentabilidad_calculada: number | null
+  costo_compra_calculado: number | null
+  mantenimiento_acumulado: number | null
+}
+
+export type SaleInput = {
+  bovinoId: string
+  fechaVenta: string
+  pesoSalidaKg: number
+  precioKilo: number
+  compradorCanal: string
+  mantenimientoDiario: number
+}
+
+export type SalePreview = {
+  diasMantenimiento: number
+  ingresoBruto: number
+  costoCompra: number | null
+  mantenimientoAcumulado: number
+  rentabilidad: number | null
+}
+
 export type DashboardMetrics = {
   activeBulls: number
   averageGmd: number | null

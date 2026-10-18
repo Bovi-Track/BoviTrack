@@ -480,6 +480,11 @@ export default function HomePage() {
                 label="Compras en subasta"
               />
               <Shortcut
+                to="/ventas"
+                icon={<ShoppingBag className="size-5" />}
+                label="Registrar y consultar ventas"
+              />
+              <Shortcut
                 to="/tareas"
                 icon={<ClipboardList className="size-5" />}
                 label="Tareas del equipo"

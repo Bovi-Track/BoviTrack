@@ -10,7 +10,7 @@ function FarmScreen() {
   const { activeFarm, role, loadedUserId, loading } = useFarm()
   const { pathname } = useLocation()
   if (loading && !loadedUserId) return <p className="p-6">Cargando…</p>
-  if (['/finca', '/compras', '/reporte'].includes(pathname) && role !== 'admin') {
+  if (['/finca', '/compras', '/reporte', '/ventas'].includes(pathname) && role !== 'admin') {
     return <p role="alert" className="p-6">Selecciona una finca donde tengas el rol ADMINISTRADOR para acceder.</p>
   }
   return <Outlet key={`${activeFarm?.id ?? ''}:${role}`} />

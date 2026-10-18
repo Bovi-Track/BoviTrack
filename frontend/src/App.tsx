@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage.tsx'
 import PurchasesPage from './pages/PurchasesPage.tsx'
 import RegisterPage from './pages/RegisterPage.tsx'
 import ReportPage from './pages/ReportPage.tsx'
+import SalesPage from './pages/SalesPage.tsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
 import TasksPage from './pages/TasksPage.tsx'
@@ -60,6 +61,7 @@ function App() {
         <Route path="/pesajes" element={<WeighingsPage />} />
         <Route path="/inventario" element={<InventoryPage />} />
         <Route path="/reporte" element={<ReportPage />} />
+        <Route path="/ventas" element={<SalesPage />} />
         <Route path="/finca" element={<FarmManagePage />} />
         <Route path="/ajustes" element={<SettingsPage />} />
       </Route>
