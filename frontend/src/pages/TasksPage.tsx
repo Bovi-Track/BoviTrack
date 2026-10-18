@@ -1,15 +1,15 @@
 import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { SegmentButton } from '../components/dashboard/SegmentButton.tsx'
 import { formatDayLong, todayIso } from '../lib/dates.ts'
-import { ClipboardList, Plus, Search } from 'lucide-react'
+import { ClipboardList, History, Loader2, Pencil, Plus, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/useAuth.ts'
 import { Field, Modal, fieldClass } from '../components/dashboard/Modal.tsx'
 import { Toast } from '../components/dashboard/Toast.tsx'
 import { useFarm } from '../context/useFarm.ts'
 import { roleLabel, loadFarmMembers } from '../lib/farms.ts'
-import { loadTasks, createTask, updateTaskDone } from '../lib/tasks.ts'
-import type { FarmMember, Task } from '../types/dashboard.ts'
+import { loadTasks, createTask, loadTaskHistory, updateTask, updateTaskDone } from '../lib/tasks.ts'
+import type { FarmMember, Task, TaskHistoryEntry } from '../types/dashboard.ts'
 
 const emptyForm = {
   titulo: '',
@@ -30,6 +30,11 @@ export default function TasksPage() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [historyTask, setHistoryTask] = useState<Task | null>(null)
+  const [history, setHistory] = useState<TaskHistoryEntry[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
   const displayName =
@@ -43,12 +48,6 @@ export default function TasksPage() {
     const timer = window.setTimeout(() => setToast(null), 3200)
     return () => window.clearTimeout(timer)
   }, [toast])
-
-  useEffect(() => {
-    setTasks([])
-    setMembers([])
-    setScope('mias')
-  }, [activeFarm?.id])
 
   useEffect(() => {
     if (!activeFarm) return
@@ -123,38 +122,81 @@ export default function TasksPage() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
-  // RF-UC11-01 (parcial): crea la tarea asignada y recarga su lista confirmada.
+  // RF-UC11-01: crea o modifica una tarea y recarga la lista confirmada.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!activeFarm?.activo || role !== 'admin') return
     const assignee = people.find((item) => item.userId === form.asignadaA)
+    setSaving(true)
     try {
-      await createTask(
-        activeFarm.id,
-        form.titulo.trim(),
-        form.descripcion.trim() || null,
-        form.fecha_limite,
-        assignee?.userId ?? null
-      )
+      if (editingTask) {
+        await updateTask(
+          editingTask.id,
+          form.titulo.trim(),
+          form.descripcion.trim() || null,
+          form.fecha_limite || null,
+          assignee?.userId ?? null,
+        )
+      } else {
+        await createTask(
+          activeFarm.id,
+          form.titulo.trim(),
+          form.descripcion.trim() || null,
+          form.fecha_limite || null,
+          assignee?.userId ?? null,
+        )
+      }
       
       const updatedTasks = await loadTasks(activeFarm.id)
       setTasks(updatedTasks)
       
       setOpen(false)
+      setEditingTask(null)
       setForm({ ...emptyForm, fecha_limite: todayIso() })
-      if (assignee && assignee.userId !== user?.id) {
+      if (editingTask) {
         setScope('equipo')
+        setStatus('todas')
+        setToast('Tarea actualizada; el cambio quedó en el historial.')
+      } else if (assignee && assignee.userId !== user?.id) {
+        setScope('equipo')
+        setStatus('pendientes')
+        setToast(`Tarea asignada a ${memberLabel(assignee)}.`)
       } else {
         setScope('mias')
+        setStatus('pendientes')
+        setToast('Tarea guardada en tu lista.')
       }
-      setStatus('pendientes')
-      setToast(
-        assignee && assignee.userId !== user?.id
-          ? `Tarea asignada a ${memberLabel(assignee)}.`
-          : 'Tarea guardada en tu lista.',
-      )
     } catch {
-      setToast('No se pudo guardar la tarea. Intenta de nuevo.')
+      setToast(editingTask ? 'No se pudo actualizar la tarea.' : 'No se pudo guardar la tarea. Intenta de nuevo.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // RF-UC11-01: abre la edición con los datos vigentes de la tarea seleccionada.
+  function edit(task: Task) {
+    setEditingTask(task)
+    setForm({
+      titulo: task.titulo,
+      descripcion: task.descripcion ?? '',
+      asignadaA: task.asignada_a ?? '',
+      fecha_limite: task.fecha_limite ?? '',
+    })
+    setOpen(true)
+  }
+
+  // RF-UC11-01: carga el historial únicamente cuando el administrador lo solicita.
+  async function showHistory(task: Task) {
+    setHistoryTask(task)
+    setHistory([])
+    setLoadingHistory(true)
+    try {
+      setHistory(await loadTaskHistory(task.id))
+    } catch {
+      setHistoryTask(null)
+      setToast('No se pudo cargar el historial de la tarea.')
+    } finally {
+      setLoadingHistory(false)
     }
   }
 
@@ -286,45 +328,70 @@ export default function TasksPage() {
                 key={task.id}
                 className="rounded-3xl border border-stone-200/80 bg-white p-4 shadow-sm"
               >
-                <label className="flex cursor-pointer items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={done}
-                    onChange={() => toggle(task)}
-                    className="mt-1 size-5 accent-bovi"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-start justify-between gap-3">
-                      <span
-                        className={`text-sm font-medium ${
-                          done ? 'text-stone-400 line-through' : 'text-stone-900'
-                        }`}
-                      >
-                        {task.titulo}
+                <div className="flex items-start gap-3">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={done}
+                      onChange={() => toggle(task)}
+                      className="mt-1 size-5 accent-bovi"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-3">
+                        <span
+                          className={`text-sm font-medium ${
+                            done ? 'text-stone-400 line-through' : 'text-stone-900'
+                          }`}
+                        >
+                          {task.titulo}
+                        </span>
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            overdue
+                              ? 'bg-red-100 text-red-800'
+                              : done
+                                ? 'bg-stone-100 text-stone-500'
+                                : 'bg-amber-100 text-amber-900'
+                          }`}
+                        >
+                          {done ? 'Hecha' : overdue ? 'Vencida' : formatDayLong(task.fecha_limite, false)}
+                        </span>
                       </span>
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          overdue
-                            ? 'bg-red-100 text-red-800'
-                            : done
-                              ? 'bg-stone-100 text-stone-500'
-                              : 'bg-amber-100 text-amber-900'
-                        }`}
-                      >
-                        {done ? 'Hecha' : overdue ? 'Vencida' : formatDayLong(task.fecha_limite, false)}
+                      {task.descripcion ? (
+                        <span className="mt-1 block text-xs text-stone-500">
+                          {task.descripcion}
+                        </span>
+                      ) : null}
+                      <span className="mt-2 block text-xs text-stone-500">
+                        {task.asignada_nombre}
+                        {done || overdue ? ` · ${formatDayLong(task.fecha_limite, false)}` : ''}
                       </span>
                     </span>
-                    {task.descripcion ? (
-                      <span className="mt-1 block text-xs text-stone-500">
-                        {task.descripcion}
-                      </span>
-                    ) : null}
-                    <span className="mt-2 block text-xs text-stone-500">
-                      {task.asignada_nombre}
-                      {done || overdue ? ` · ${formatDayLong(task.fecha_limite, false)}` : ''}
-                    </span>
-                  </span>
-                </label>
+                  </label>
+                  {role === 'admin' ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => edit(task)}
+                        disabled={!activeFarm?.activo}
+                        aria-label={`Editar tarea ${task.titulo}`}
+                        title="Editar tarea"
+                        className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-stone-500 transition hover:bg-bovi/10 hover:text-bovi disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void showHistory(task)}
+                        aria-label={`Historial de tarea ${task.titulo}`}
+                        title="Ver historial"
+                        className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-stone-500 transition hover:bg-bovi/10 hover:text-bovi"
+                      >
+                        <History className="size-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </li>
             )
           })}
@@ -333,9 +400,9 @@ export default function TasksPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
-        title="Asignar tarea"
-        description="La persona elegida la verá en Mis tareas."
+        onClose={() => { setOpen(false); setEditingTask(null) }}
+        title={editingTask ? 'Editar tarea' : 'Asignar tarea'}
+        description={editingTask ? 'Actualiza los datos o reasigna la tarea a un miembro de la finca.' : 'La persona elegida la verá en Mis tareas.'}
       >
         <form onSubmit={onSubmit} className="space-y-4">
           <Field id="tarea-titulo" label="Tarea">
@@ -379,7 +446,7 @@ export default function TasksPage() {
             <input
               id="tarea-fecha"
               type="date"
-              required
+              required={!editingTask}
               value={form.fecha_limite}
               onChange={(event) => update('fecha_limite', event.target.value)}
               className={fieldClass}
@@ -387,11 +454,41 @@ export default function TasksPage() {
           </Field>
           <button
             type="submit"
-            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover"
+            disabled={saving}
+            className="min-h-12 w-full cursor-pointer rounded-xl bg-bovi text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Asignar tarea
+            {saving ? 'Guardando…' : editingTask ? 'Guardar cambios' : 'Asignar tarea'}
           </button>
         </form>
+      </Modal>
+
+      <Modal
+        open={historyTask !== null}
+        onClose={() => setHistoryTask(null)}
+        title="Historial de tarea"
+        description={historyTask?.titulo ?? ''}
+      >
+        {loadingHistory ? (
+          <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin text-stone-400" /></div>
+        ) : history.length === 0 ? (
+          <p className="py-6 text-center text-sm text-stone-500">Esta tarea aún no tiene cambios registrados.</p>
+        ) : (
+          <ol className="max-h-[60vh] space-y-3 overflow-y-auto">
+            {history.map((entry, index) => (
+              <li key={`${entry.fecha_cambio}:${index}`} className="rounded-xl border border-stone-200 bg-cream p-3">
+                <div className="flex flex-wrap justify-between gap-1 text-xs text-stone-500">
+                  <span>{entry.tipo_cambio === 'EDICION' ? 'Tarea editada' : 'Estado actualizado'} · {entry.cambiado_por}</span>
+                  <time dateTime={entry.fecha_cambio}>{formatHistoryDate(entry.fecha_cambio)}</time>
+                </div>
+                <ul className="mt-2 space-y-1 text-sm text-stone-700">
+                  {historyChanges(entry).map((change) => (
+                    <li key={change.label}><span className="font-medium">{change.label}:</span> {change.before} → {change.after}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        )}
       </Modal>
     </div>
   )
@@ -401,4 +498,36 @@ export default function TasksPage() {
 function memberLabel(member: Pick<FarmMember, 'nombre' | 'email'>) {
   const name = member.nombre?.trim()
   return name || member.email
+}
+
+function formatHistoryDate(value: string) {
+  return new Date(value).toLocaleString('es-CR', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function historyChanges(entry: TaskHistoryEntry) {
+  const fields = entry.tipo_cambio === 'ESTADO'
+    ? [{ key: 'estado', label: 'Estado' }]
+    : [
+        { key: 'titulo', label: 'Tarea' },
+        { key: 'descripcion', label: 'Detalle' },
+        { key: 'fecha_limite', label: 'Fecha límite' },
+        { key: 'responsable', label: 'Responsable' },
+      ]
+
+  return fields.flatMap(({ key, label }) => {
+    const beforeValue = entry.valores_anteriores[key]
+    const afterValue = entry.valores_nuevos[key]
+    if (JSON.stringify(beforeValue) === JSON.stringify(afterValue)) return []
+    return [{ label, before: displayHistoryValue(key, beforeValue), after: displayHistoryValue(key, afterValue) }]
+  })
+}
+
+function displayHistoryValue(key: string, value: unknown) {
+  if (key === 'responsable') {
+    if (!value || typeof value !== 'object') return 'Toda la finca'
+    const name = (value as { nombre?: unknown }).nombre
+    return typeof name === 'string' && name ? name : 'Toda la finca'
+  }
+  if (key === 'fecha_limite') return typeof value === 'string' && value ? formatDayLong(value, false) : 'Sin fecha'
+  return typeof value === 'string' && value ? value : 'Sin detalle'
 }

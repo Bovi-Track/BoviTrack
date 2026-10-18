@@ -20,6 +20,7 @@ WHERE n.nspname IN ('public','private') AND p.proname IN (
   'obtener_costos_bovinos_finca','es_miembro_finca','obtener_fincas_usuario','crear_finca','actualizar_finca',
   'obtener_roles','obtener_miembros_finca','agregar_miembro_finca','eliminar_miembro_finca','crear_invitacion_finca',
   'aceptar_invitacion_finca','crear_tarea_finca','obtener_tareas_finca','marcar_tarea_estado',
+  'actualizar_tarea_finca','obtener_historial_tarea',
   'obtener_registros_sanitarios_finca','registrar_aplicacion_sanitaria','eliminar_registro_sanitario',
   'validar_acceso_inventario','obtener_inventario_finca','obtener_movimientos_insumo','guardar_insumo',
   'desactivar_insumo','registrar_movimiento_inventario','obtener_reporte_inventario','registrar_compra_subasta','registrar_compra_subasta_impl','procesar_operacion_offline')
@@ -61,6 +62,8 @@ WITH esperadas(firma,permite_authenticated,permite_anon) AS (VALUES
   ('public.crear_tarea_finca(uuid,text,text,date,uuid)',true,false),
   ('public.obtener_tareas_finca(uuid)',true,false),
   ('public.marcar_tarea_estado(uuid,text)',true,false),
+  ('public.actualizar_tarea_finca(uuid,text,text,date,uuid)',true,false),
+  ('public.obtener_historial_tarea(uuid)',true,false),
   ('public.obtener_registros_sanitarios_finca(uuid)',true,false),
   ('public.registrar_aplicacion_sanitaria(uuid,text,text,text,date,date,text,text)',true,false),
   ('public.registrar_compra_subasta(text,text,date,numeric,text,jsonb)',true,false),
@@ -87,6 +90,12 @@ WITH esperadas(firma,permite_authenticated,permite_anon) AS (VALUES
   UNION ALL
   SELECT 'RLS', '16 tablas públicas protegidas',count(*)=16 AND bool_and(c.relrowsecurity)
     FROM tablas t JOIN pg_namespace n ON n.nspname='public' JOIN pg_class c ON c.relnamespace=n.oid AND c.relname=t.nombre
+  UNION ALL
+  SELECT 'historial privado de ediciones','RLS y sin grants directos a clientes',
+    coalesce((SELECT c.relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='private' AND c.relname='historial_tarea_edicion'),false)
+    AND NOT EXISTS(SELECT 1 FROM information_schema.table_privileges
+      WHERE table_schema='private' AND table_name='historial_tarea_edicion' AND grantee IN ('PUBLIC','anon','authenticated'))
   UNION ALL
   SELECT 'costos directos', 'precio_compra_kilo y costo_flete_asignado denegados a clientes',NOT EXISTS(
     SELECT 1 FROM (VALUES ('anon'),('authenticated')) AS r(nombre)

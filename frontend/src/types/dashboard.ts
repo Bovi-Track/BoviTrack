@@ -60,6 +60,14 @@ export type Task = {
   asignada_nombre: string
 }
 
+export type TaskHistoryEntry = {
+  fecha_cambio: string
+  cambiado_por: string
+  tipo_cambio: 'EDICION' | 'ESTADO'
+  valores_anteriores: Record<string, unknown>
+  valores_nuevos: Record<string, unknown>
+}
+
 export type Treatment = {
   id: string
   bovino_id: string
