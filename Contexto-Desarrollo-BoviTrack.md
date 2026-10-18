@@ -10,10 +10,10 @@ BoviTrack administra fincas dedicadas al engorde de toros: compras, asignaciones
 
 | Actor | Alcance autorizado |
 |---|---|
-| Administrador de Finca | Administra sus fincas, toros, compras, catálogo, tareas, usuarios, ventas, evaluaciones y reportes. Consulta información operativa y financiera. |
-| Personal de Campo | Opera únicamente en fincas asignadas. Consulta toros, pesajes y sanidad; registra pesajes, aplicaciones sanitarias, movimientos de inventario y bajas; consulta y actualiza sus tareas. No administra cuentas, catálogo ni fincas y no accede a información financiera. |
+| ADMINISTRADOR | Administra sus fincas, toros, compras, catálogo, tareas, usuarios, ventas, evaluaciones y reportes. Consulta información operativa y financiera. |
+| PERSONAL_CAMPO | Opera únicamente en fincas asignadas. Consulta toros, pesajes y sanidad; registra pesajes, aplicaciones sanitarias, movimientos de inventario y bajas; consulta y actualiza sus tareas. No administra cuentas, catálogo ni fincas y no accede a información financiera. |
 
-Un usuario puede tener un rol distinto en cada finca. La sesión autenticada no concede por sí sola acceso a todas las fincas.
+Un usuario puede tener un rol distinto en cada finca. Toda cuenta activa puede crear sus propias fincas y queda como `ADMINISTRADOR` de ellas; para ingresar en otra finca, su administrador puede agregar la cuenta registrada directamente por correo o generar una invitación por enlace. Ambos mecanismos permiten `ADMINISTRADOR` y `PERSONAL_CAMPO`. La sesión autenticada no concede por sí sola acceso a todas las fincas.
 
 ## 2. Arquitectura vigente
 
@@ -53,11 +53,11 @@ Los 30 requisitos funcionales asociados a estos casos y los transversales RF-TR-
 
 Existen flujos online de compras, fincas y miembros, toros, pesajes/GMD, sanidad, tareas y autenticación. Su cobertura y validaciones pendientes están detalladas por requisito en la bitácora.
 
-El catálogo, movimientos e historial de inventario están implementados. Su SQL fue aplicado en Supabase y el flujo administrador se comprobó con sesiones reales, incluyendo persistencia, saldo no negativo, concurrencia y paginación. El PDF de bodega ya utiliza datos reales y fechas inclusivas. Las sesiones reales de personal, cuenta inactiva y no miembro siguen pendientes de aceptación.
+El catálogo, movimientos e historial de inventario están implementados. Su SQL fue aplicado en Supabase y el flujo administrador se comprobó con sesiones reales, incluyendo persistencia, saldo no negativo, concurrencia y paginación. El PDF de bodega ya utiliza datos reales y fechas inclusivas. Personal real y rechazo de acceso sin membresía ya están comprobados; la cuenta inactiva real sigue pendiente.
 
 La evaluación económica completa de venta, el registro de ventas/bajas y la trazabilidad unificada todavía requieren desarrollo. El periodo de bodega no filtra las otras secciones del PDF.
 
-La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La sesión se concentra en `AuthProvider`; los formularios liberan su estado de envío ante respuestas y excepciones, y el resultado inicial de Auth no puede sobrescribir un evento de sesión más reciente. La verificación de cuentas inactivas y permisos sigue pendiente. La capa offline compartida está implementada con IndexedDB y su SQL ya está aplicado en Supabase. La aceptación con administrador real pasó en Chromium; los otros roles y navegadores siguen pendientes.
+La primera pasada de ordenamiento separó los servicios por dominio y añadió comentarios de requisitos en las funciones de entrada y descripciones en los helpers. La sesión se concentra en `AuthProvider`; los formularios liberan su estado de envío ante respuestas y excepciones, y el resultado inicial de Auth no puede sobrescribir un evento de sesión más reciente. El SQL de UC-14 ya fue aplicado en Supabase. Verifica cuentas activas y roles por finca; administrador real comprobado en 39 controles HTTP/Chromium, incluidos login, consultas, PDF, rechazos de acceso y cierre, sin escrituras de negocio. La aceptación adicional con PERSONAL_CAMPO real pasó 89 controles, incluyendo roles distintos por finca, capturas offline y revocación/restauración de membresía. Quedan pendientes cuenta inactiva real e inspección administrativa completa. La sesión revalida el perfil al entrar, recuperar conexión, enfocar y cada 30 segundos; una invalidación conserva las capturas pendientes. La capa offline compartida está implementada con IndexedDB y su SQL ya está aplicado en Supabase. La aceptación con administrador y personal reales pasó en Chromium; cuenta inactiva real y Safari/Firefox siguen pendientes.
 
 ## 5. Operación offline
 
@@ -71,12 +71,12 @@ Cada captura conserva usuario, finca, identificador único y estado pendiente o 
 
 El guardado local se distingue de la confirmación central. Los fallos de red conservan el pendiente; los rechazos quedan visibles para revisión y bloquean la cola hasta resolverlos. Una sesión inválida solicita autenticación sin borrar las capturas. Se impide cerrar sesión con capturas sin resolver; al cerrarla se limpian las copias del usuario. Los saldos offline son provisionales: Supabase puede rechazar movimientos por cambios concurrentes.
 
-La cola antigua de pesajes en `localStorage` se conserva sin enviarla automáticamente, porque no identifica a su propietario. Debe revisarse manualmente. Las pruebas locales están en `frontend/tests/offline-browser.py` y `frontend/tests/offline-sql.py`; `frontend/tests/offline-live.py` prueba contra Supabase real. Pasaron 49 comprobaciones con administrador, incluyendo las cuatro capturas, reconexión, reintentos, concurrencia, sesión inválida y contenido del PDF. La prueba usa una finca QA aislada y conserva su historial al desactivarla. Quedan pendientes personal de campo, cuenta inactiva/no miembro y Safari/Firefox.
+La cola antigua de pesajes en `localStorage` se conserva sin enviarla automáticamente, porque no identifica a su propietario. Debe revisarse manualmente. Las pruebas locales están en `frontend/tests/offline-browser.py` y `frontend/tests/offline-sql.py`; `frontend/tests/offline-live.py` prueba contra Supabase real. Pasaron 49 comprobaciones con administrador, incluyendo las cuatro capturas, reconexión, reintentos, concurrencia, sesión inválida y contenido del PDF. La prueba usa una finca QA aislada y conserva su historial al desactivarla. `frontend/tests/field-live.py` pasó 89 comprobaciones adicionales con personal real, las cuatro capturas, reapertura offline, reintentos, roles por finca y revocación/restauración de acceso. No miembro también comprobado; quedan cuenta inactiva real y Safari/Firefox. Ambas pruebas usan datos QA aislados y conservan el historial al desactivarlos.
 
 ## 6. Reglas de negocio
 
 - Cada acceso y escritura debe respetar cuenta activa, rol y finca autorizada. Los roles desconocidos no conceden permisos administrativos.
-- Se reconocen explícitamente `ADMINISTRADOR` / `Administrador de Finca` y `PERSONAL_CAMPO` / `Personal de Campo`. Existen comprobaciones antiguas con nombres distintos entre módulos que deben unificarse.
+- Los nombres de rol acordados son únicamente `ADMINISTRADOR` y `PERSONAL_CAMPO`. `frontend/sql/uc14_control_acceso.sql` consolida los nombres anteriores conservando membresías e invitaciones y restringe su recreación; ya fue aplicado en Supabase y los dos nombres canónicos están comprobados por HTTP. El frontend mantiene `admin`/`campo` como valores internos de presentación y caché, no como roles adicionales de la base.
 - Correo, identificador interno del toro y DIIO/SENASA deben ser únicos cuando se registran. Actualmente el alta general permite DIIO vacío y compras lo exige; conservar esa distinción hasta acordar un cambio.
 - Un toro pertenece a una sola finca activa a la vez. Asignaciones, retiros y traslados deben conservar finca de origen, destino y fecha; no se sustituye el historial por un cambio directo de pertenencia.
 - Los pesajes son positivos y corresponden a toro y responsable válidos. La GMD se calcula como diferencia de peso dividida por los días entre pesajes; no se almacena como una copia independiente.
@@ -86,8 +86,8 @@ La cola antigua de pesajes en `localStorage` se conserva sin enviarla automátic
 - Los movimientos confirmados de inventario son inmutables y se corrigen con ajustes. Con historial, no se cambia la unidad ni categoría de un insumo. Desactivar conserva saldo e historial y bloquea nuevos movimientos.
 - Una venta o baja solo se registra sobre un toro activo que no haya sido vendido o dado de baja. El evento y el cambio de estado deben confirmarse en una transacción y conservar trazabilidad.
 - Desactivar fincas, toros, insumos o usuarios no elimina su historial. Los registros necesarios para trazabilidad no deben borrarse físicamente.
-- Una tarea pertenece a una finca y solo se asigna a un usuario válido con acceso. El administrador la gestiona; el personal actualiza las tareas autorizadas. Los cambios deben conservar historial.
-- Los PDF se generan para administradores y fincas autorizadas. Cada ámbito debe respetar el periodo solicitado; actualmente esa selección está completa únicamente en bodega.
+- Una tarea pertenece a una finca y solo se asigna a un usuario válido con acceso. El personal consulta y actualiza únicamente las tareas asignadas a su cuenta, incluidas las copias locales; las tareas sin responsable quedan bajo administración. El administrador gestiona las tareas y los cambios deben conservar historial.
+- Los PDF se generan para administradores y fincas autorizadas. Todas las descargas revalidan el acceso mediante la RPC de UC-14, también sin bodega; esta RPC ya está aplicada en Supabase y ambas descargas de PDF se comprobaron con administrador real. Cada ámbito debe respetar el periodo solicitado; actualmente esa selección está completa únicamente en bodega.
 
 ## 7. Requisitos no funcionales
 

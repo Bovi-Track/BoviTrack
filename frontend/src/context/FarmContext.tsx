@@ -33,7 +33,6 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    setLoading(true)
     try {
       const rows = await loadUserFarms(user.id)
       if (request !== refreshRequest.current) return
@@ -67,6 +66,8 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshFarms()
+    window.addEventListener('bovitrack:access', refreshFarms)
+    return () => window.removeEventListener('bovitrack:access', refreshFarms)
   }, [refreshFarms])
 
   // RF-UC03-01: selecciona la finca de trabajo y conserva la preferencia del navegador.

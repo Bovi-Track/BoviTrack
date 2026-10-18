@@ -124,7 +124,7 @@ export default function HomePage() {
   async function handleCreateBovine(
     payload: Omit<Parameters<typeof createBovine>[0], 'finca_id'>,
   ) {
-    if (!activeFarm) throw new Error('Selecciona una finca primero.')
+    if (!activeFarm?.activo || role !== 'admin') throw new Error('Esta operación requiere administrador de una finca activa.')
     const created = await createBovine({ ...payload, finca_id: activeFarm.id })
     setBovines((current) => [created, ...current])
     setMetrics((current) => ({
@@ -281,7 +281,7 @@ export default function HomePage() {
       <QuickWeighCard
         bovines={bovines}
         disabled={!activeFarm}
-        onAddBovine={() => setAddBovineOpen(true)}
+        onAddBovine={role === 'admin' && activeFarm?.activo ? () => setAddBovineOpen(true) : undefined}
         onSave={handleSaveWeighing}
       />
 

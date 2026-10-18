@@ -59,7 +59,7 @@ export default function TasksPage() {
     async function loadData() {
       try {
         const [membersData, tasksData] = await Promise.all([
-          navigator.onLine ? loadFarmMembers(farmId) : Promise.resolve([]),
+          navigator.onLine && role === 'admin' ? loadFarmMembers(farmId) : Promise.resolve([]),
           loadTasks(farmId)
         ])
         if (active) {
@@ -78,7 +78,7 @@ export default function TasksPage() {
     return () => {
       active = false
     }
-  }, [activeFarm, revision])
+  }, [activeFarm, role, revision])
 
   const people = useMemo(() => {
     const list = [...members]
@@ -98,8 +98,8 @@ export default function TasksPage() {
     const term = query.trim().toLowerCase()
     return tasks
       .filter((task) => {
-        if (scope === 'mias') {
-          const mine = !task.asignada_a || task.asignada_a === user?.id
+        if (role !== 'admin' || scope === 'mias') {
+          const mine = task.asignada_a === user?.id || (role === 'admin' && !task.asignada_a)
           if (!mine) return false
         }
         if (status === 'pendientes' && task.estado !== 'PENDIENTE') return false
@@ -111,7 +111,7 @@ export default function TasksPage() {
           .includes(term)
       })
       .sort((a, b) => a.fecha_limite.localeCompare(b.fecha_limite) || a.titulo.localeCompare(b.titulo))
-  }, [query, scope, status, tasks, user?.id])
+  }, [query, role, scope, status, tasks, user?.id])
 
   const mineCount = tasks.filter(
     (task) =>
@@ -126,7 +126,7 @@ export default function TasksPage() {
   // RF-UC11-01 (parcial): crea la tarea asignada y recarga su lista confirmada.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!activeFarm) return
+    if (!activeFarm?.activo || role !== 'admin') return
     const assignee = people.find((item) => item.userId === form.asignadaA)
     try {
       await createTask(
@@ -160,6 +160,7 @@ export default function TasksPage() {
 
   // RF-UC11-02: cambia el estado de una tarea y actualiza la lista tras la confirmación.
   async function toggle(task: Task) {
+    if (!activeFarm?.activo || (role !== 'admin' && task.asignada_a !== user?.id)) return
     const nextStatus = task.estado === 'COMPLETADA' ? false : true
     try {
       await updateTaskDone(task.id, nextStatus, activeFarm!.id)
@@ -201,7 +202,7 @@ export default function TasksPage() {
               : 'Selecciona una finca desde Inicio para ver las tareas.'}
           </p>
         </div>
-        <button
+        {role === 'admin' ? <button
           type="button"
           onClick={() => {
             setForm({
@@ -211,12 +212,12 @@ export default function TasksPage() {
             })
             setOpen(true)
           }}
-          disabled={!activeFarm}
+          disabled={!activeFarm?.activo}
           className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-bovi px-3 text-sm font-medium text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="size-4" />
           Asignar
-        </button>
+        </button> : null}
       </header>
 
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
@@ -226,12 +227,12 @@ export default function TasksPage() {
           onClick={() => setScope('mias')}
           label={`Mis tareas${mineCount ? ` · ${mineCount}` : ''}`}
         />
-        <SegmentButton
+        {role === 'admin' ? <SegmentButton
           className="px-2"
           active={scope === 'equipo'}
           onClick={() => setScope('equipo')}
           label="Del equipo"
-        />
+        /> : null}
       </div>
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">

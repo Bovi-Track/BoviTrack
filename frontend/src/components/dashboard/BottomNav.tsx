@@ -1,5 +1,6 @@
 import { Beef, House, Scale, Settings, Tractor, Warehouse } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useFarm } from '../../context/useFarm.ts'
 
 const items = [
   { to: '/inicio', label: 'Inicio', icon: House },
@@ -12,10 +13,12 @@ const items = [
 
 // Presenta la navegación móvil y resalta la ruta activa.
 export function BottomNav() {
+  const { role } = useFarm()
+  const visible = items.filter((item) => item.to !== '/finca' || role === 'admin')
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200/80 bg-white/95 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
-      <ul className="mx-auto grid max-w-lg grid-cols-6 gap-1">
-        {items.map((item) => {
+      <ul className={`mx-auto grid max-w-lg gap-1 ${visible.length === 6 ? 'grid-cols-6' : 'grid-cols-5'}`}>
+        {visible.map((item) => {
           const Icon = item.icon
           return (
             <li key={item.to}>

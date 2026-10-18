@@ -7,14 +7,14 @@ const ACTIVE_FARM_KEY = 'bovitrack-active-farm'
 // Traduce un rol conocido a su etiqueta; mantiene explícito el rol desconocido.
 export function roleLabel(role: FarmRole) {
   if (role === 'unknown') return 'Rol no reconocido'
-  return role === 'admin' ? 'Administrador de Finca' : 'Personal de Campo'
+  return role === 'admin' ? 'ADMINISTRADOR' : 'PERSONAL_CAMPO'
 }
 
 // Normaliza solo los nombres de rol reconocidos; cualquier otro queda como unknown.
 export function mapRole(name: string | null | undefined): FarmRole {
   const normalized = name?.trim().toUpperCase()
-  if (normalized === 'ADMINISTRADOR' || normalized === 'ADMINISTRADOR DE FINCA') return 'admin'
-  if (normalized === 'PERSONAL_CAMPO' || normalized === 'PERSONAL DE CAMPO') return 'campo'
+  if (normalized === 'ADMINISTRADOR') return 'admin'
+  if (normalized === 'PERSONAL_CAMPO') return 'campo'
   return 'unknown'
 }
 
@@ -132,7 +132,7 @@ export async function addFarmMember(
     p_correo:   email,
     p_rol_id:   roleId,
   })
-  if (error) throw error
+  if (error) throw new Error(error.message)
 }
 
 // RF-UC15-01 (parcial): retira la asociación a la finca; no desactiva la cuenta.

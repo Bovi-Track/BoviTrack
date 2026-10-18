@@ -8,7 +8,7 @@ import { iniciarSesion, mensajeAuth } from '../auth/service.ts'
 
 // RF-UC14-01: presenta el acceso por correo o usuario con preferencia Recordarme.
 export default function LoginPage() {
-  const { user, loading, passwordRecovery } = useAuth()
+  const { user, loading, passwordRecovery, accessError } = useAuth()
   const navigate = useNavigate()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -109,9 +109,9 @@ export default function LoginPage() {
           Recuérdame
         </label>
 
-        {error ? (
+        {error || accessError ? (
           <p className="mt-3 text-sm text-red-600" role="alert">
-            {error}
+            {error || accessError}
           </p>
         ) : null}
 

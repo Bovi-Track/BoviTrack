@@ -267,7 +267,7 @@ export function MembersSection({
         {inviteTab === 'email' && (
           <>
             <p className="text-xs text-stone-500 mb-3">
-              El usuario debe estar registrado en BoviTrack.
+              La cuenta debe estar registrada y activa. Se agregará con el rol elegido sin tener que aceptar una invitación.
             </p>
             <form onSubmit={handleAdd} className="space-y-3">
               <div className="relative">

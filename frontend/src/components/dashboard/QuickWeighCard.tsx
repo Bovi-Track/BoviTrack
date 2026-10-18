@@ -8,7 +8,7 @@ import { fieldClass } from './Modal.tsx'
 type QuickWeighCardProps = {
   bovines: Bovine[]
   disabled?: boolean
-  onAddBovine: () => void
+  onAddBovine?: () => void
   onSave: (payload: {
     bovino_id: string
     peso_kg: number
@@ -81,7 +81,7 @@ export function QuickWeighCard({
   return (
     <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-5 flex items-start justify-between gap-3">
-        <button
+        {onAddBovine ? <button
           type="button"
           onClick={onAddBovine}
           disabled={disabled}
@@ -89,7 +89,7 @@ export function QuickWeighCard({
         >
           <Plus className="size-4" strokeWidth={2} />
           Agregar bovino
-        </button>
+        </button> : null}
         <p className="max-w-40 text-right text-xs text-stone-400">
           Captura rápida en campo
         </p>

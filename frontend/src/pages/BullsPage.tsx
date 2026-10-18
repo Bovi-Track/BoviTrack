@@ -21,7 +21,6 @@ import {
   worstStatus,
   loadSanitaryRecords,
   createSanitaryRecord,
-  removeSanitaryRecord,
 } from '../lib/sanitary.ts'
 import { SegmentButton } from '../components/dashboard/SegmentButton.tsx'
 import { formatDayLong as formatIso, todayIso } from '../lib/dates.ts'
@@ -99,7 +98,8 @@ function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
 // RF-UC04-01, RF-UC07-01 y RF-UC07-02: coordina altas, ficha y plan sanitario del hato.
 export default function BullsPage() {
   const revision = useOfflineRevision()
-  const { activeFarm, loading } = useFarm()
+  const { activeFarm, role, loading } = useFarm()
+  const canManage = role === 'admin' && Boolean(activeFarm?.activo)
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [weighings, setWeighings] = useState<Weighing[]>([])
   const [query, setQuery] = useState('')
@@ -234,7 +234,7 @@ export default function BullsPage() {
   // RF-UC04-01: valida y persiste el alta múltiple de toros en la finca seleccionada.
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!activeFarm) {
+    if (!activeFarm || !canManage) {
       setAddError('Selecciona una finca activa desde Inicio.')
       return
     }
@@ -284,7 +284,7 @@ export default function BullsPage() {
   // RF-UC04-01 (parcial): guarda la ficha; las transiciones de UC-12/13 siguen pendientes.
   async function onSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selected) return
+    if (!selected || !canManage) return
     const identificador = editForm.identificador_interno.trim()
     if (!identificador) {
       setEditError('El identificador interno es obligatorio.')
@@ -365,17 +365,6 @@ export default function BullsPage() {
     }
   }
 
-  // RF-UC07-01 (desviación pendiente): ejecuta la eliminación sanitaria heredada.
-  async function removeRecord(id: string) {
-    try {
-      await removeSanitaryRecord(id)
-      setRecords((current) => current.filter((item) => item.id !== id))
-      setToast({ message: 'Registro eliminado.', tone: 'ok' })
-    } catch {
-      setToast({ message: 'No se pudo eliminar el registro.', tone: 'error' })
-    }
-  }
-
   if (loading) {
     return <p className="mx-auto max-w-3xl px-4 pt-10 text-sm text-stone-500">Cargando…</p>
   }
@@ -397,9 +386,8 @@ export default function BullsPage() {
             setSelectedId(null)
             setKindFilter('TODOS')
           }}
-          onEdit={openEdit}
+          onEdit={canManage ? openEdit : undefined}
           onRegister={(tipo) => openPlan(selected.id, tipo)}
-          onRemove={removeRecord}
         />
       ) : (
         <>
@@ -417,7 +405,7 @@ export default function BullsPage() {
                   : 'Selecciona una finca desde Inicio para ver el hato.'}
               </p>
             </div>
-            <button
+            {canManage ? <button
               type="button"
               onClick={openAdd}
               disabled={!activeFarm}
@@ -425,7 +413,7 @@ export default function BullsPage() {
             >
               <Plus className="size-4" />
               Agregar
-            </button>
+            </button> : null}
           </header>
 
           <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
@@ -819,12 +807,8 @@ export default function BullsPage() {
               className={fieldClass}
             >
               <option value="ACTIVO">Activo</option>
-              <option value="VENDIDO">Vendido</option>
-              <option value="BAJA">Baja</option>
-              <option value="MUERTO">Muerto</option>
-              {editForm.estado === 'INACTIVO' ? (
-                <option value="INACTIVO">Inactivo</option>
-              ) : null}
+              <option value="INACTIVO">Inactivo</option>
+              {['VENDIDO', 'BAJA', 'MUERTO'].includes(editForm.estado) ? <option value={editForm.estado}>{bovineStatusLabel(editForm.estado)}</option> : null}
             </select>
           </Field>
           {editError ? (
