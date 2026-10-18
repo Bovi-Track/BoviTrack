@@ -1,3 +1,4 @@
+import { useOfflineRevision } from '../offline/useOfflineRevision.ts'
 import { HistoryItem } from '../components/bovines/SanitaryHistoryItem.tsx'
 import {
   bovineStatusLabel,
@@ -97,6 +98,7 @@ function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
 
 // RF-UC04-01, RF-UC07-01 y RF-UC07-02: coordina altas, ficha y plan sanitario del hato.
 export default function BullsPage() {
+  const revision = useOfflineRevision()
   const { activeFarm, loading } = useFarm()
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [weighings, setWeighings] = useState<Weighing[]>([])
@@ -149,7 +151,7 @@ export default function BullsPage() {
     async function load() {
       try {
         const rows = await loadBovines(farmId)
-        const nextWeighings = await loadWeighings(rows.map((item) => item.id))
+        const nextWeighings = await loadWeighings(rows.map((item) => item.id), farmId)
         const nextRecords = await loadSanitaryRecords(farmId)
         if (!active) return
         setBovines(rows)
@@ -165,7 +167,7 @@ export default function BullsPage() {
     return () => {
       active = false
     }
-  }, [activeFarm])
+  }, [activeFarm, revision])
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -319,7 +321,7 @@ export default function BullsPage() {
   // RF-UC07-01: valida dosis, solicita la aplicación y recarga el historial sanitario.
   async function onSubmitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!planForm.bovino_id) return
+    if (!planForm.bovino_id || !activeFarm) return
 
     if (!Number.isFinite(Number(planForm.dosis)) || Number(planForm.dosis) <= 0) {
       setToast({
@@ -338,7 +340,8 @@ export default function BullsPage() {
         planForm.fecha,
         planForm.proxima || null,
         null,
-        planForm.observaciones.trim() || null
+        planForm.observaciones.trim() || null,
+        activeFarm.id
       )
 
       if (activeFarm) {
@@ -351,7 +354,7 @@ export default function BullsPage() {
       setPlanOpen(false)
       setPlanForm(emptyPlan())
       setToast({
-        message: 'Registro sanitario guardado.',
+        message: 'Registro sanitario guardado en el dispositivo; pendiente de sincronizar.',
         tone: 'ok',
       })
     } catch {
@@ -843,7 +846,7 @@ export default function BullsPage() {
         open={planOpen}
         onClose={() => setPlanOpen(false)}
         title="Registrar aplicación"
-        description="Queda en el historial de esta sesión. Aún no se guarda en la finca."
+        description="Se guarda en este dispositivo y se confirma en la finca al sincronizar."
       >
         <form onSubmit={onSubmitPlan} className="space-y-4">
           <Field id="plan-toro" label="Toro">

@@ -1,4 +1,4 @@
-import { addDays, todayIso } from './dates.ts'
+import { addDays, isValidIsoDate, todayIso } from './dates.ts'
 import {
   SANITARY_KINDS,
   type PlanStatus,
@@ -6,10 +6,18 @@ import {
   type SanitaryRecord,
 } from '../types/sanitary.ts'
 import { supabase } from './supabase.ts'
+import { cachedRead, capture, requireConnection } from '../offline/runtime.ts'
 import type { Treatment } from '../types/dashboard.ts'
 
 // RF-UC07-02: consulta próximas aplicaciones para el hato; conserva el límite actual de 12.
-export async function loadTreatments(bovineIds: string[]) {
+export async function loadTreatments(bovineIds: string[], farmId: string) {
+  if (!bovineIds.length) return [] as Treatment[]
+  const ids = [...bovineIds].sort()
+  return cachedRead(`treatments:${ids.join(',')}`, farmId, () => fetchTreatments(ids))
+}
+
+// Consulta las próximas aplicaciones y adapta la relación con el toro.
+async function fetchTreatments(bovineIds: string[]) {
   if (bovineIds.length === 0) return [] as Treatment[]
   const { data, error } = await supabase
     .from('registro_sanitario')
@@ -20,6 +28,8 @@ export async function loadTreatments(bovineIds: string[]) {
     .not('proxima_aplicacion', 'is', null)
     .order('proxima_aplicacion', { ascending: true })
     .limit(12)
+    .retry(false)
+    .abortSignal(AbortSignal.timeout(8000))
 
   if (error) throw error
   return (data ?? []).map((row) => {
@@ -37,6 +47,11 @@ export async function loadTreatments(bovineIds: string[]) {
 
 // RF-UC07-01: consulta el historial sanitario devuelto por la RPC de la finca.
 export async function loadSanitaryRecords(farmId: string) {
+  return cachedRead(`sanitary:${farmId}`, farmId, () => fetchSanitaryRecords(farmId))
+}
+
+// Consulta el historial sanitario autorizado de la finca en Supabase.
+async function fetchSanitaryRecords(farmId: string) {
   const { data, error } = await supabase.rpc('obtener_registros_sanitarios_finca', {
     p_finca_id: farmId,
   })
@@ -54,24 +69,24 @@ export async function createSanitaryRecord(
   proxima: string | null,
   responsable: string | null,
   observaciones: string | null,
+  farmId: string,
 ) {
-  const { data, error } = await supabase.rpc('registrar_aplicacion_sanitaria', {
-    p_bovino_id: bovinoId,
-    p_tipo: tipo,
-    p_producto: producto,
-    p_dosis: dosis,
-    p_fecha_aplicacion: fecha,
-    p_proxima_aplicacion: proxima,
-    p_responsable: responsable,
-    p_observaciones: observaciones,
-  })
-  if (error) throw error
-  return data
+  if (!producto.trim() || !SANITARY_KINDS.includes(tipo) || !Number.isFinite(Number(dosis)) ||
+    Number(dosis) <= 0 || !isValidIsoDate(fecha) || (proxima && !isValidIsoDate(proxima))) {
+    throw new Error('Completa producto, dosis positiva y fechas válidas.')
+  }
+  return capture(farmId, 'sanitary', {
+    bovino_id: bovinoId, tipo, producto, dosis, fecha, proxima, observaciones,
+  }, (id): SanitaryRecord => ({
+    id, bovino_id: bovinoId, tipo, producto, dosis, fecha, proxima: proxima ?? '',
+    responsable: responsable ?? 'Pendiente de confirmar', observaciones: observaciones ?? '',
+  }))
 }
 
 // RF-UC07-01 (desviación pendiente): solicita el borrado sanitario heredado.
 // Debe revisarse para conservar el historial exigido por la trazabilidad.
 export async function removeSanitaryRecord(id: string) {
+  requireConnection()
   const { error } = await supabase.rpc('eliminar_registro_sanitario', { p_id: id })
   if (error) throw error
 }

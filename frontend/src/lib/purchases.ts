@@ -1,8 +1,10 @@
+import { requireConnection } from '../offline/runtime.ts'
 import { supabase } from './supabase.ts'
 import type { CreatePurchaseInput, PurchaseResult } from '../types/purchases.ts'
 
 // RF-UC01-01 y RF-UC01-02: envía la compra completa a su RPC transaccional.
 export async function createPurchase(payload: CreatePurchaseInput) {
+  requireConnection()
   const { data, error } = await supabase.rpc('registrar_compra_subasta', {
     p_id_subasta: payload.id_subasta,
     p_numero_factura: payload.numero_factura,

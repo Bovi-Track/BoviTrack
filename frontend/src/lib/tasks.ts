@@ -1,8 +1,14 @@
 import { supabase } from './supabase.ts'
+import { cachedRead, capture, requireConnection } from '../offline/runtime.ts'
 import type { Task } from '../types/dashboard.ts'
 
 // RF-UC11-01 y RF-UC11-02: consulta las tareas devueltas por la RPC de la finca.
 export async function loadTasks(farmId: string) {
+  return cachedRead(`tasks:${farmId}`, farmId, () => fetchTasks(farmId))
+}
+
+// Consulta las tareas online para actualizar su copia operativa.
+async function fetchTasks(farmId: string) {
   const { data, error } = await supabase.rpc('obtener_tareas_finca', {
     p_finca_id: farmId,
   })
@@ -19,6 +25,7 @@ export async function createTask(
   fecha_limite: string | null,
   asignadaA: string | null,
 ) {
+  requireConnection()
   const { data, error } = await supabase.rpc('crear_tarea_finca', {
     p_finca_id: farmId,
     p_titulo: titulo,
@@ -31,10 +38,7 @@ export async function createTask(
 }
 
 // RF-UC11-02: solicita cambiar una tarea entre pendiente y completada.
-export async function updateTaskDone(id: string, done: boolean) {
-  const { error } = await supabase.rpc('marcar_tarea_estado', {
-    p_id: id,
-    p_estado: done ? 'COMPLETADA' : 'PENDIENTE',
-  })
-  if (error) throw error
+export async function updateTaskDone(id: string, done: boolean, farmId: string) {
+  const estado = done ? 'COMPLETADA' : 'PENDIENTE'
+  return capture(farmId, 'task', { id, estado }, () => ({ id, estado }))
 }

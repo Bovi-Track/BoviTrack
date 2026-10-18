@@ -54,6 +54,12 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         storeFarmId(next)
         return next
       })
+    } catch {
+      if (request !== refreshRequest.current) return
+      setFarms([])
+      setRolesByFarm({})
+      setLoadedUserId(null)
+      setActiveFarmIdState(null)
     } finally {
       if (request === refreshRequest.current) setLoading(false)
     }

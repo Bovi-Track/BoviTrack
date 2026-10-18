@@ -1,4 +1,5 @@
 import { supabase } from './supabase.ts'
+import { cachedRead, requireConnection } from '../offline/runtime.ts'
 import type { Farm, FarmMember, FarmRole } from '../types/dashboard.ts'
 
 const ACTIVE_FARM_KEY = 'bovitrack-active-farm'
@@ -33,6 +34,11 @@ export function storeFarmId(id: string | null) {
 
 // RF-UC03-01 y RF-UC14-03: consulta las fincas y roles devueltos para el usuario.
 export async function loadUserFarms(userId: string) {
+  return cachedRead('farms', null, () => fetchUserFarms(userId))
+}
+
+// Consulta y normaliza las fincas autorizadas antes de conservarlas localmente.
+async function fetchUserFarms(userId: string) {
   const { data, error } = await supabase.rpc('obtener_fincas_usuario', {
     p_usuario_id: userId,
   })
@@ -59,6 +65,7 @@ export async function loadUserFarms(userId: string) {
 
 // RF-UC03-01: solicita la creación de una finca mediante la RPC existente.
 export async function createFarm(nombre: string, ubicacion: string) {
+  requireConnection()
   const { data, error } = await supabase.rpc('crear_finca', {
     p_nombre: nombre,
     p_ubicacion: ubicacion,
@@ -72,6 +79,7 @@ export async function updateFarm(
   farmId: string,
   patch: Partial<Pick<Farm, 'nombre' | 'ubicacion' | 'activo'>>,
 ) {
+  requireConnection()
   const { data, error } = await supabase.rpc('actualizar_finca', {
     p_finca_id:  farmId,
     p_nombre:    patch.nombre    ?? '',
@@ -118,6 +126,7 @@ export async function addFarmMember(
   email: string,
   roleId: string,
 ): Promise<void> {
+  requireConnection()
   const { error } = await supabase.rpc('agregar_miembro_finca', {
     p_finca_id: farmId,
     p_correo:   email,
@@ -128,6 +137,7 @@ export async function addFarmMember(
 
 // RF-UC15-01 (parcial): retira la asociación a la finca; no desactiva la cuenta.
 export async function removeFarmMember(farmId: string, userId: string): Promise<void> {
+  requireConnection()
   const { error } = await supabase.rpc('eliminar_miembro_finca', {
     p_finca_id:   farmId,
     p_usuario_id: userId,
@@ -140,6 +150,7 @@ export async function createFarmInvitation(
   farmId: string,
   roleId: string,
 ): Promise<string> {
+  requireConnection()
   const { data, error } = await supabase.rpc('crear_invitacion_finca', {
     p_finca_id: farmId,
     p_rol_id:   roleId,
@@ -152,6 +163,7 @@ export async function createFarmInvitation(
 export async function acceptFarmInvitation(
   token: string,
 ): Promise<{ finca_id: string; nombre: string; ubicacion: string | null; activo: boolean }> {
+  requireConnection()
   const { data, error } = await supabase.rpc('aceptar_invitacion_finca', {
     p_token: token,
   })

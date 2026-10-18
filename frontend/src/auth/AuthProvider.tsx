@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase.ts'
+import { isConnectionError, isOnline, setOfflineUser, startOfflineSync } from '../offline/runtime.ts'
+import { readOfflineIdentity, saveOfflineIdentity } from '../offline/identity.ts'
 
 // RF-UC14-01 y RF-UC14-02: mantiene una sola sesión observable y su estado de recuperación.
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -15,16 +17,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true
 
-    supabase.auth.getUser().then(({ data }) => {
+    // Publica la identidad antes de que las pantallas consulten sus datos locales.
+    function applyUser(next: User | null) {
       if (!active) return
-      setUser(data.user ?? null)
+      setOfflineUser(next?.id ?? null)
+      setUser(next)
       setLoading(false)
-    })
+    }
+
+    if (!isOnline()) applyUser(readOfflineIdentity())
+    else void supabase.auth.getUser().then(({ data, error }) => {
+      const next = error && isConnectionError(error) ? readOfflineIdentity() : data.user
+      if (!error) saveOfflineIdentity(next)
+      applyUser(next)
+    }).catch(() => applyUser(readOfflineIdentity()))
+
+    const stopSync = startOfflineSync()
+    // Conserva la cola del propietario y solicita autenticación si Supabase rechaza su sesión.
+    const requireLogin = () => {
+      saveOfflineIdentity(null)
+      applyUser(null)
+      // Invalida la sesión del SDK sin borrar los datos ni la cola del propietario.
+      void supabase.auth.signOut({ scope: 'local' })
+    }
+    window.addEventListener('bovitrack:reauth', requireLogin)
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
+      const next = session?.user ?? (!isOnline() ? readOfflineIdentity() : null)
+      if (session?.user) saveOfflineIdentity(session.user)
+      applyUser(next)
 
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true)
@@ -42,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'SIGNED_OUT') {
+        if (isOnline()) saveOfflineIdentity(null)
         setPasswordRecovery(false)
       }
     })
@@ -49,6 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
       subscription.unsubscribe()
+      stopSync()
+      window.removeEventListener('bovitrack:reauth', requireLogin)
     }
   }, [navigate])
 

@@ -1,4 +1,6 @@
 import { supabase } from './supabase.ts'
+import { cachedRead, capture, requireConnection } from '../offline/runtime.ts'
+import { isValidIsoDate } from './dates.ts'
 import {
   INVENTORY_CATEGORIES,
   MOVEMENT_TYPES,
@@ -59,11 +61,7 @@ function movementType(value: unknown): MovementType {
 }
 // Verifica formato y fecha de calendario sin aceptar días inexistentes.
 export function validInventoryDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const [y, m, d] = value.split('-').map(Number)
-  const date = new Date(0)
-  date.setFullYear(y, m - 1, d)
-  return y > 0 && date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d
+  return isValidIsoDate(value)
 }
 // Adapta una fecha del contrato y rechaza valores inválidos.
 function date(value: unknown): string {
@@ -93,14 +91,14 @@ export function inventoryErrorMessage(cause: unknown): string {
   if (error?.code === '42501') return 'No tienes permiso para esta operación en la finca seleccionada.'
   if (error?.code === 'PGRST202') return 'Las funciones de inventario todavía no están disponibles en Supabase.'
   if (error?.message && /fetch|network|offline|conexión/i.test(error.message)) {
-    return 'No se pudo confirmar la operación por un fallo de conexión. Actualiza el historial antes de repetir un movimiento.'
+    return 'No se pudo conectar al servidor. Tus capturas pendientes se conservan en el dispositivo.'
   }
   return error?.message ?? 'No se pudo consultar o guardar el inventario. Intenta nuevamente.'
 }
 // Ejecuta una RPC de inventario y traduce el error antes de adaptar la respuesta.
 async function rpc(name: string, args: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await supabase.rpc(name, args)
-  if (error) throw new Error(inventoryErrorMessage(error))
+  if (error) throw new Error(inventoryErrorMessage(error), { cause: error })
   return data
 }
 // Adapta un insumo del JSON manteniendo estado, categoría y saldo tipados.
@@ -121,12 +119,22 @@ function movement(value: unknown): InventoryMovement {
 }
 // RF-UC08-01 y RF-UC09-02: consulta catálogo y saldos de la finca autorizada.
 export async function loadInventory(farmId: string): Promise<InventoryItem[]> {
+  return cachedRead(`inventory:${farmId}`, farmId, () => fetchInventory(farmId))
+}
+
+// Consulta y valida catálogo y saldos antes de conservar su copia operativa.
+async function fetchInventory(farmId: string): Promise<InventoryItem[]> {
   const rows = list(await rpc('obtener_inventario_finca', { p_finca_id: farmId })).map(item)
   if (rows.some((r) => r.finca_id !== farmId)) throw invalid()
   return rows
 }
 // RF-UC09-02: consulta una página del historial y su total sin mezclar insumos.
-export async function loadInventoryMovements(itemId: string, offset = 0): Promise<MovementPage> {
+export async function loadInventoryMovements(itemId: string, offset = 0, farmId: string): Promise<MovementPage> {
+  return cachedRead(`history:${itemId}:${offset}`, farmId, () => fetchInventoryMovements(itemId, offset))
+}
+
+// Consulta una página confirmada del historial del insumo.
+async function fetchInventoryMovements(itemId: string, offset: number): Promise<MovementPage> {
   const r = object(await rpc('obtener_movimientos_insumo', { p_insumo_id: itemId, p_limite: 50, p_offset: offset }))
   const movimientos = list(r.movimientos).map(movement)
   const total = num(r.total)
@@ -137,6 +145,7 @@ export async function loadInventoryMovements(itemId: string, offset = 0): Promis
 export async function saveInventoryItem(farmId: string, input: {
   nombre: string; tipo: InventoryCategory; unidad_medida: string; id?: string
 }): Promise<InventoryItem> {
+  requireConnection()
   const nombre = input.nombre.trim(), unidad = input.unidad_medida.trim()
   if (!nombre || nombre.length > 100 || !unidad || unidad.length > 20) throw new Error('Completa nombre y unidad válidos.')
   const result = item(await rpc('guardar_insumo', { p_finca_id: farmId, p_nombre: nombre, p_tipo: input.tipo,
@@ -146,6 +155,7 @@ export async function saveInventoryItem(farmId: string, input: {
 }
 // RF-UC08-01: solicita desactivar el insumo conservando su historial.
 export async function deactivateInventoryItem(itemId: string): Promise<InventoryItem> {
+  requireConnection()
   const result = item(await rpc('desactivar_insumo', { p_insumo_id: itemId }))
   if (result.id !== itemId || result.activo) throw invalid()
   return result
@@ -153,14 +163,20 @@ export async function deactivateInventoryItem(itemId: string): Promise<Inventory
 // RF-UC09-01: valida la captura y obtiene movimiento y saldo confirmados por la RPC.
 export async function registerInventoryMovement(itemId: string, input: {
   tipo: MovementType; cantidad: string; fecha: string; observaciones: string
-}): Promise<{ movimiento: InventoryMovement; stock: number }> {
+}, farmId: string, currentStock: number) {
   const cantidad = parseInventoryQuantity(input.cantidad)
   if (!validInventoryDate(input.fecha)) throw new Error('Selecciona una fecha válida para el movimiento.')
-  const r = object(await rpc('registrar_movimiento_inventario', { p_insumo_id: itemId, p_tipo: input.tipo,
-    p_cantidad: cantidad, p_fecha_movimiento: input.fecha, p_observaciones: input.observaciones.trim() || null }))
-  const movimiento = movement(r.movimiento), stock = num(r.stock)
-  if (movimiento.insumo_id !== itemId || stock < 0) throw invalid()
-  return { movimiento, stock }
+  if (!MOVEMENT_TYPES.includes(input.tipo)) throw new Error('Selecciona un tipo de movimiento válido.')
+  if (!Number.isFinite(currentStock) || currentStock < 0) throw new Error('Actualiza las existencias antes de registrar el movimiento.')
+  const delta = ['ENTRADA', 'AJUSTE_POSITIVO'].includes(input.tipo) ? cantidad : -cantidad
+  const stock = (Math.round(currentStock * 100) + Math.round(delta * 100)) / 100
+  if (stock < 0) throw new Error('Saldo insuficiente para registrar este movimiento.')
+  return capture(farmId, 'inventory', { insumo_id: itemId, tipo: input.tipo,
+    cantidad, fecha: input.fecha, observaciones: input.observaciones }, (id) => ({
+    stock, movimiento: { id, insumo_id: itemId, tipo: input.tipo, cantidad,
+      fecha_movimiento: input.fecha, registrado_por: null, responsable_nombre: 'Pendiente de confirmar',
+      observaciones: input.observaciones, created_at: new Date().toISOString() } satisfies InventoryMovement,
+  }))
 }
 // Adapta y valida el reporte, incluyendo periodo, números y coherencia de saldos.
 export function parseInventoryReport(value: unknown): InventoryReport {
@@ -186,6 +202,7 @@ export function parseInventoryReport(value: unknown): InventoryReport {
 }
 // RF-TR-03: consulta el resumen y detalle de bodega para la finca y periodo indicados.
 export async function loadInventoryReport(farmId: string, desde: string, hasta: string): Promise<InventoryReport> {
+  requireConnection()
   validateInventoryPeriod(desde, hasta)
   const report = parseInventoryReport(await rpc('obtener_reporte_inventario', {
     p_finca_id: farmId, p_desde: desde, p_hasta: hasta,
