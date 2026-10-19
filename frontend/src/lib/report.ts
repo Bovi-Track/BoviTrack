@@ -5,7 +5,7 @@ import autoTable from 'jspdf-autotable'
 import { bovineStatusLabel, bovineLabel } from './bovines.ts'
 import { formatDate, formatDayLong } from './dates.ts'
 import { jsPDF } from 'jspdf'
-import { computeMetrics, saleHints } from './dashboard.ts'
+import { computeMetrics } from './dashboard.ts'
 import {
   EXPECTED_GMD_KG,
   LOW_GMD_KG,
@@ -14,7 +14,8 @@ import {
   formatSigned,
   type WeeklyReport,
 } from './gmd.ts'
-import type { Bovine, SaleHint, Treatment, Weighing } from '../types/dashboard.ts'
+import type { Bovine, Treatment, Weighing, SaleRecord } from '../types/dashboard.ts'
+import type { SanitaryRecord } from '../types/sanitary.ts'
 import { type InventoryReport, movementLabels } from '../types/inventory.ts'
 import { parseInventoryReport } from './inventory.ts'
 
@@ -61,13 +62,13 @@ export const REPORT_SECTIONS: ReportSection[] = [
   },
   {
     id: 'tratamientos',
-    label: 'Tratamientos y alertas',
-    description: 'Próximas aplicaciones sanitarias.',
+    label: 'Historial sanitario',
+    description: 'Aplicaciones, productos, dosis y responsables del periodo.',
   },
   {
     id: 'venta',
-    label: 'Evaluación de venta',
-    description: 'Pesajes disponibles para evaluar la venta.',
+    label: 'Ventas y rentabilidad',
+    description: 'Ventas cerradas, ingreso, costos y rentabilidad calculada.',
   },
 ]
 
@@ -78,6 +79,9 @@ export type ReportData = {
   bovines: Bovine[]
   weighings: Weighing[]
   treatments: Treatment[]
+  sanitaryRecords?: SanitaryRecord[]
+  sales?: SaleRecord[]
+  period?: { desde: string; hasta: string }
   inventory?: InventoryReport
 }
 
@@ -108,15 +112,6 @@ function formatDateTime(iso: string) {
     dateStyle: 'long',
     timeStyle: 'short',
   }).format(date)
-}
-
-// Traduce la sugerencia heredada de venta a su etiqueta del PDF.
-function saleLabel(status: SaleHint['status']) {
-  if (status === 'rentable') return 'Rentable hoy'
-  if (status === 'no_rentable') return 'No rentable hoy'
-  if (status === 'falta_costos') return 'Faltan costos'
-  if (status === 'falta_parametros') return 'Faltan parámetros'
-  return 'Faltan pesajes'
 }
 
 // Obtiene la posición final de la última tabla para continuar el documento.
@@ -393,7 +388,7 @@ function addWeeklyVisual(doc: jsPDF, farmName: string, weekly: WeeklyReport) {
   )
 }
 
-// RF-TR-03 (parcial): genera el PDF semanal a partir del hato y sus pesajes.
+// RF-TR-03: genera el PDF semanal a partir del hato y los pesajes del periodo.
 export function buildWeeklyReportPdf(data: {
   farmName: string
   bovines: ReportData['bovines']
@@ -419,7 +414,7 @@ export function buildWeeklyReportPdf(data: {
   }
 }
 
-// RF-TR-03 (parcial): genera las secciones elegidas con datos reales de bodega por periodo.
+// RF-TR-03: genera las secciones elegidas con historiales y datos de bodega por periodo.
 // Las demás secciones conservan su comportamiento actual y sus pendientes funcionales.
 export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   if (selection.inventario && !data.inventory) throw new Error('Faltan los datos confirmados del inventario de bodega.')
@@ -427,8 +422,10 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const metrics = computeMetrics(data.bovines, data.weighings, data.treatments)
   const weekly = buildWeeklyReport(data.bovines, data.weighings)
-  const hints = saleHints(data.bovines, data.weighings)
   const byBovine = new Map(data.bovines.map((item) => [item.id, item]))
+  const periodLabel = data.period
+    ? `Periodo: ${formatDate(data.period.desde)} al ${formatDate(data.period.hasta)} (inclusive).`
+    : ''
   const pageWidth = doc.internal.pageSize.getWidth()
   const hasOthers = REPORT_SECTIONS.some(
     (section) => section.id !== 'semanal' && selection[section.id],
@@ -502,13 +499,14 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
 
   if (selection.pesajes) {
     y = addHeading(doc, y, 'Historial de pesajes')
+    if (periodLabel) y = addNote(doc, y, periodLabel)
     y = addTable(
       doc,
       y,
       ['Bovino', 'Fecha', 'Peso'],
       data.weighings.length === 0
         ? [['No hay pesajes registrados.', '', '']]
-        : [...data.weighings].reverse().map((item) => {
+        : [...data.weighings].sort((a, b) => b.fecha_pesaje.localeCompare(a.fecha_pesaje) || b.id.localeCompare(a.id)).map((item) => {
             const bovine = byBovine.get(item.bovino_id)
             return [
               bovine ? bovineLabel(bovine) : 'Bovino',
@@ -525,7 +523,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
     // Formatea las cantidades de bodega para las tablas del PDF.
     const qty = (n: number) => n.toLocaleString('es-CR', { maximumFractionDigits: 2 })
     y = addNote(doc, y, `${inventory.finca_nombre} · Del ${formatDate(inventory.desde)} al ${formatDate(inventory.hasta)} (inclusive).`)
-    y = addNote(doc, y, 'El periodo se aplica solo a bodega. Cada saldo conserva la unidad de su insumo.')
+    y = addNote(doc, y, 'El periodo incluye las fechas inicial y final. Cada saldo conserva la unidad de su insumo.')
     if (inventory.resumen.length === 0) {
       y = addNote(doc, y, 'El catálogo de bodega está vacío para este periodo.')
     } else {
@@ -546,37 +544,54 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
   }
 
   if (selection.tratamientos) {
-    y = addHeading(doc, y, 'Tratamientos y alertas')
+    y = addHeading(doc, y, 'Historial sanitario')
+    if (periodLabel) y = addNote(doc, y, periodLabel)
+    const sanitaryRecords = data.sanitaryRecords ?? []
     y = addTable(
       doc,
       y,
-      ['Bovino', 'Próxima aplicación', 'Detalle'],
-      data.treatments.length === 0
-        ? [['No hay tratamientos programados.', '', '']]
-        : data.treatments.map((item) => {
-            const bovine = item.bovino ?? byBovine.get(item.bovino_id)
+      ['Bovino', 'Fecha', 'Aplicación', 'Dosis', 'Próxima', 'Responsable'],
+      sanitaryRecords.length === 0
+        ? [['No hay aplicaciones sanitarias en el periodo.', '', '', '', '', '']]
+        : [...sanitaryRecords].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id)).map((item) => {
+            const bovine = byBovine.get(item.bovino_id)
             return [
               bovine ? bovineLabel(bovine) : 'Bovino',
-              item.proxima_aplicacion ? formatDate(item.proxima_aplicacion) : '—',
-              item.observaciones ?? 'Aplicación programada',
+              formatDate(item.fecha),
+              `${item.tipo}: ${item.producto}${item.observaciones ? `\n${item.observaciones}` : ''}`,
+              item.dosis,
+              item.proxima ? formatDate(item.proxima) : '—',
+              item.responsable || '—',
             ]
           }),
     )
   }
 
   if (selection.venta) {
-    y = addHeading(doc, y, 'Datos para evaluar venta')
+    y = addHeading(doc, y, 'Ventas y rentabilidad')
+    if (periodLabel) y = addNote(doc, y, periodLabel)
+    const sales = data.sales ?? []
     addTable(
       doc,
       y,
-      ['Bovino', 'Recomendación', 'Detalle'],
-      hints.length === 0
-        ? [['Agrega bovinos y pesajes para evaluar ventas.', '', '']]
-        : hints.map((hint) => [
-            bovineLabel(hint.bovine),
-            saleLabel(hint.status),
-            hint.detail,
-          ]),
+      ['Bovino', 'Fecha', 'Peso salida', 'Precio/kg', 'Ingreso bruto', 'Compra', 'Mantenimiento', 'Rentabilidad'],
+      sales.length === 0
+        ? [['No hay ventas registradas en el periodo.', '', '', '', '', '', '', '']]
+        : [...sales].sort((a, b) => b.fecha_venta.localeCompare(a.fecha_venta) || b.id.localeCompare(a.id)).map((sale) => {
+            const bovine = byBovine.get(sale.bovino_id)
+            const currency = (value: number | null) => value == null ? 'No disponible' : `₡${value.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            const gross = Math.round((sale.peso_salida_kg * sale.precio_kilo + Number.EPSILON) * 100) / 100
+            return [
+              bovine ? bovineLabel(bovine) : sale.identificador_interno,
+              formatDate(sale.fecha_venta),
+              `${sale.peso_salida_kg.toFixed(1)} kg`,
+              currency(sale.precio_kilo),
+              currency(gross),
+              currency(sale.costo_compra_calculado),
+              currency(sale.mantenimiento_acumulado),
+              currency(sale.rentabilidad_calculada),
+            ]
+          }),
     )
   }
 

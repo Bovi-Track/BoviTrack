@@ -9,10 +9,11 @@ import { useAuth } from '../auth/useAuth.ts'
 import { Field, fieldClass } from '../components/dashboard/Modal.tsx'
 import { loadInventoryReport, validateInventoryPeriod } from '../lib/inventory.ts'
 import { loadBovines } from '../lib/bovines.ts'
-import { loadTreatments } from '../lib/sanitary.ts'
+import { loadSanitaryRecords, loadTreatments } from '../lib/sanitary.ts'
 import { loadWeighings } from '../lib/weighings.ts'
-import { todayIso } from '../lib/dates.ts'
+import { isValidIsoDate, todayIso } from '../lib/dates.ts'
 import { buildWeeklyReport } from '../lib/gmd.ts'
+import { loadSales } from '../lib/sales.ts'
 import {
   REPORT_SECTIONS,
   buildReportPdf,
@@ -24,9 +25,10 @@ import {
   type ReportData,
   type ReportSelection,
 } from '../lib/report.ts'
-import type { Bovine, Farm, Treatment, Weighing } from '../types/dashboard.ts'
+import type { Bovine, Farm, SaleRecord, Treatment, Weighing } from '../types/dashboard.ts'
+import type { SanitaryRecord } from '../types/sanitary.ts'
 
-// RF-TR-03 (parcial): presenta los reportes de la finca con acceso administrativo a bodega.
+// RF-TR-03: presenta los reportes de la finca y exige administración para generar PDF.
 export default function ReportPage() {
   const { activeFarm, rolesByFarm, loading, loadedUserId } = useFarm()
   const { user, loading: authLoading } = useAuth()
@@ -37,7 +39,7 @@ export default function ReportPage() {
     canInventory={Boolean(user && activeFarm && rolesByFarm[activeFarm.id] === 'admin')} />
 }
 
-// RF-TR-03 (parcial): coordina selección de secciones, periodo de bodega y descarga.
+// RF-TR-03: coordina selección, periodo inclusivo de secciones y descarga autorizada.
 function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; canInventory: boolean }) {
   const revision = useOfflineRevision()
   const [selection, setSelection] = useState<ReportSelection>(defaultReportSelection)
@@ -46,7 +48,10 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
   const [bovines, setBovines] = useState<Bovine[]>([])
   const [weighings, setWeighings] = useState<Weighing[]>([])
   const [treatments, setTreatments] = useState<Treatment[]>([])
+  const [sanitaryRecords, setSanitaryRecords] = useState<SanitaryRecord[]>([])
+  const [sales, setSales] = useState<SaleRecord[]>([])
   const [loadingData, setLoadingData] = useState(Boolean(activeFarm))
+  const [dataError, setDataError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{
     message: string
@@ -71,21 +76,27 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
     if (!farmId) return
     const capturedFarmId = farmId
     let active = true
-    // Carga hato, pesajes y próximas aplicaciones para las secciones existentes del PDF.
+    // Carga datos de finca y los historiales necesarios para el reporte por periodo.
     async function load() {
       try {
         const nextBovines = await loadBovines(capturedFarmId)
         const ids = nextBovines.map((item) => item.id)
-        const [nextWeighings, nextTreatments] = await Promise.all([
+        const [nextWeighings, nextTreatments, nextSanitaryRecords, nextSales] = await Promise.all([
           loadWeighings(ids, capturedFarmId),
           loadTreatments(ids, capturedFarmId),
+          loadSanitaryRecords(capturedFarmId),
+          loadSales(capturedFarmId),
         ])
         if (!active) return
         setBovines(nextBovines)
         setWeighings(nextWeighings)
         setTreatments(nextTreatments)
+        setSanitaryRecords(nextSanitaryRecords)
+        setSales(nextSales)
+        setDataError(false)
       } catch {
         if (active) {
+          setDataError(true)
           setToast({
             message: 'No se pudieron cargar los datos del reporte.',
             tone: 'error',
@@ -113,15 +124,17 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
       bovines,
       weighings,
       treatments,
+      sanitaryRecords,
+      sales,
     }
-  }, [activeFarm, bovines, treatments, weighings])
+  }, [activeFarm, bovines, sales, sanitaryRecords, treatments, weighings])
 
   // Activa o desactiva una sección de la selección del reporte.
   function toggle(id: keyof ReportSelection) {
     setSelection((current) => ({ ...current, [id]: !current[id] }))
   }
 
-  // RF-TR-03 (parcial): consulta bodega por periodo y genera el PDF con la selección capturada.
+  // RF-TR-03: filtra historiales al periodo y genera el PDF con autorización vigente.
   async function generate() {
     if (generating.current) return
     if (!reportData) {
@@ -137,14 +150,27 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
     }
     const capturedSelection = { ...effectiveSelection }
     const capturedFarmId = activeFarm?.id
+    const usesPeriod = capturedSelection.semanal || capturedSelection.pesajes || capturedSelection.tratamientos || capturedSelection.venta || capturedSelection.inventario
     generating.current = true
     setSaving(true)
     try {
+      if (usesPeriod && (!isValidIsoDate(desde) || !isValidIsoDate(hasta) || desde > hasta)) {
+        throw new Error('Selecciona un periodo válido: la fecha inicial debe ser anterior o igual a la final.')
+      }
       if (capturedSelection.inventario) validateInventoryPeriod(desde, hasta)
       const inventory = capturedSelection.inventario && capturedFarmId
         ? await loadInventoryReport(capturedFarmId, desde, hasta) : undefined
       if (!live.current) return
-      const currentData = { ...reportData, generatedAt: new Date().toISOString(), inventory }
+      const inPeriod = (date: string) => !usesPeriod || (date >= desde && date <= hasta)
+      const currentData = {
+        ...reportData,
+        generatedAt: new Date().toISOString(),
+        inventory,
+        period: usesPeriod ? { desde, hasta } : undefined,
+        weighings: reportData.weighings.filter((item) => inPeriod(item.fecha_pesaje)),
+        sanitaryRecords: (reportData.sanitaryRecords ?? []).filter((item) => inPeriod(item.fecha)),
+        sales: (reportData.sales ?? []).filter((item) => inPeriod(item.fecha_venta)),
+      }
       const blob = buildReportPdf(currentData, capturedSelection)
       const filename = suggestedReportFilename(
         reportData.farmName,
@@ -236,24 +262,25 @@ function FarmReport({ activeFarm, canInventory }: { activeFarm: Farm | null; can
           })}
         </ul>
 
-        {effectiveSelection.inventario ? <div className="mt-4 space-y-3 rounded-2xl bg-cream p-4">
-          <p className="text-sm font-medium text-stone-800">Periodo del inventario de bodega</p>
+        {effectiveSelection.semanal || effectiveSelection.pesajes || effectiveSelection.tratamientos || effectiveSelection.venta || effectiveSelection.inventario ? <div className="mt-4 space-y-3 rounded-2xl bg-cream p-4">
+          <p className="text-sm font-medium text-stone-800">Periodo del reporte</p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field id="inventory-desde" label="Desde"><input id="inventory-desde" type="date" required disabled={saving} value={desde} onChange={(e) => setDesde(e.target.value)} className={fieldClass} /></Field>
-            <Field id="inventory-hasta" label="Hasta"><input id="inventory-hasta" type="date" required disabled={saving} value={hasta} onChange={(e) => setHasta(e.target.value)} className={fieldClass} /></Field>
+            <Field id="report-desde" label="Desde"><input id="report-desde" type="date" required disabled={saving} value={desde} onChange={(e) => setDesde(e.target.value)} className={fieldClass} /></Field>
+            <Field id="report-hasta" label="Hasta"><input id="report-hasta" type="date" required disabled={saving} value={hasta} onChange={(e) => setHasta(e.target.value)} className={fieldClass} /></Field>
           </div>
-          <p className="text-xs text-stone-500">Ambas fechas se incluyen. Este periodo solo se aplica a bodega; las demás secciones conservan sus datos habituales.</p>
+          <p className="text-xs text-stone-500">Ambas fechas se incluyen en pesajes/GMD, ventas y sanidad. El inventario de bodega también consulta este periodo.</p>
         </div> : null}
 
         <button
           type="button"
           onClick={generate}
-          disabled={!activeFarm || loadingData || saving || selectedCount === 0}
+          disabled={!activeFarm || loadingData || dataError || saving || selectedCount === 0}
           className="mt-5 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-bovi text-sm font-semibold text-white transition hover:bg-bovi-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save className="size-4" />
           {loadingData ? 'Cargando datos…' : saving ? 'Guardando…' : 'Guardar PDF'}
         </button>
+        {dataError ? <p role="alert" className="mt-3 text-center text-sm text-red-700">No se descargará un reporte incompleto. Actualiza la página e inténtalo de nuevo.</p> : null}
         <p className="mt-3 text-center text-xs text-stone-400">
           Elige la carpeta y el nombre del archivo.
         </p>

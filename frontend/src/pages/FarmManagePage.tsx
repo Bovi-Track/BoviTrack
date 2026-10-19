@@ -17,6 +17,16 @@ import { Toast } from '../components/dashboard/Toast.tsx'
 import { useAuth } from '../auth/useAuth.ts'
 import { useFarm } from '../context/useFarm.ts'
 
+// Expone los mensajes de error de Supabase, que pueden no ser instancias de Error.
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message
+  if (
+    typeof error === 'object' && error !== null && 'message' in error &&
+    typeof error.message === 'string'
+  ) return error.message
+  return fallback
+}
+
 // RF-UC03-01/02 y RF-UC15-02: coordina datos, miembros e historial de movimientos de la finca.
 export default function FarmManagePage() {
   const { activeFarm, farms, rolesByFarm, role, setActiveFarmId, updateActiveFarm } = useFarm()
@@ -241,8 +251,7 @@ function InfoSection({
       onToast({ message: 'Informacion de la finca actualizada', tone: 'ok' })
     } catch (err) {
       onToast({
-        message:
-          err instanceof Error ? err.message : 'No se pudo guardar. Inténtalo de nuevo.',
+        message: getErrorMessage(err, 'No se pudo guardar. Inténtalo de nuevo.'),
         tone: 'error',
       })
     } finally {
@@ -395,8 +404,7 @@ function StatusSection({
       })
     } catch (err) {
       onToast({
-        message:
-          err instanceof Error ? err.message : 'No se pudo cambiar el estado.',
+        message: getErrorMessage(err, 'No se pudo cambiar el estado.'),
         tone: 'error',
       })
     } finally {
