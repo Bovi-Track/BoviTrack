@@ -39,32 +39,50 @@ export function calculatePurchasePreview(
   bovines: { peso_compra_kg: number; precio_compra_kilo: number }[],
   freight: number,
 ) {
-  const weightTotal = bovines.reduce(
-    (sum, bovine) => sum + (Number.isFinite(bovine.peso_compra_kg) ? bovine.peso_compra_kg : 0),
-    0,
-  )
-  const freightTotal = Number.isFinite(freight) && freight > 0 ? freight : 0
-  let weightSoFar = 0
-  let subtotal = 0
+  const toCents = (value: number) => {
+    if (!Number.isFinite(value)) return 0n
+    const negative = value < 0
+    const [whole = '0', fraction = '00'] = Math.abs(value).toFixed(2).split('.')
+    const cents = BigInt(whole) * 100n + BigInt(fraction)
+    return negative ? -cents : cents
+  }
+  const fromCents = (value: bigint) => Number(value) / 100
+  const roundRatio = (numerator: bigint, denominator: bigint) => {
+    if (denominator <= 0n) return 0n
+    const negative = numerator < 0n
+    const absolute = negative ? -numerator : numerator
+    const rounded = (absolute * 2n + denominator) / (denominator * 2n)
+    return negative ? -rounded : rounded
+  }
 
-  const lines = bovines.map((bovine) => {
-    const weight = Number.isFinite(bovine.peso_compra_kg) ? bovine.peso_compra_kg : 0
-    const price = Number.isFinite(bovine.precio_compra_kilo) ? bovine.precio_compra_kilo : 0
-    const baseCost = Math.round(weight * price * 100) / 100
-    const freightShare = weightTotal > 0
-      ? Math.round((freightTotal * (weightSoFar + weight) / weightTotal) * 100) / 100
-        - Math.round((freightTotal * weightSoFar / weightTotal) * 100) / 100
-      : 0
-    weightSoFar += weight
-    subtotal += baseCost
-    return { baseCost, freightShare, initialCost: baseCost + freightShare }
+  const weights = bovines.map((bovine) => toCents(bovine.peso_compra_kg))
+  const prices = bovines.map((bovine) => toCents(bovine.precio_compra_kilo))
+  const weightTotalCents = weights.reduce((sum, weight) => sum + weight, 0n)
+  const freightTotalCents = Number.isFinite(freight) && freight > 0 ? toCents(freight) : 0n
+  let weightSoFarCents = 0n
+  let subtotalCents = 0n
+
+  const lines = bovines.map((_, index) => {
+    const weightCents = weights[index]
+    const baseCostCents = roundRatio(weightCents * prices[index], 100n)
+    const freightShareCents = weightTotalCents > 0n
+      ? roundRatio(freightTotalCents * (weightSoFarCents + weightCents), weightTotalCents)
+        - roundRatio(freightTotalCents * weightSoFarCents, weightTotalCents)
+      : 0n
+    weightSoFarCents += weightCents
+    subtotalCents += baseCostCents
+    return {
+      baseCost: fromCents(baseCostCents),
+      freightShare: fromCents(freightShareCents),
+      initialCost: fromCents(baseCostCents + freightShareCents),
+    }
   })
 
   return {
     lines,
-    weightTotal,
-    subtotal,
-    freightTotal,
-    initialTotal: subtotal + freightTotal,
+    weightTotal: fromCents(weightTotalCents),
+    subtotal: fromCents(subtotalCents),
+    freightTotal: fromCents(freightTotalCents),
+    initialTotal: fromCents(subtotalCents + freightTotalCents),
   }
 }

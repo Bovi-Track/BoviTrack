@@ -3,6 +3,7 @@ import { kinds, kindById, planStatusLabel, planStatusClass } from './sanitary-op
 import { latestOf, planStatus } from '../../lib/sanitary.ts'
 import { bovineStatusLabel, bovineLabel } from '../../lib/bovines.ts'
 import { WeightHistory } from './WeightHistory.tsx'
+import { BovineTraceability } from './BovineTraceability.tsx'
 import { SegmentButton } from '../dashboard/SegmentButton.tsx'
 import { formatDayLong as formatIso } from '../../lib/dates.ts'
 import type { SanitaryKind, SanitaryRecord } from '../../types/sanitary.ts'
@@ -10,13 +11,14 @@ import { ChevronLeft, Pencil, Plus } from 'lucide-react'
 import { useState } from 'react'
 import type { Bovine, Weighing } from '../../types/dashboard.ts'
 
-// RF-UC02-01 (parcial), RF-UC06-02 y RF-UC07-01: presenta la ficha, pesajes y sanidad del toro.
+// RF-UC02-01, RF-UC06-02 y RF-UC07-01: presenta trazabilidad, pesajes y sanidad del toro.
 export function BullSanitaryDetail({
   bovine,
   weighings,
   records,
   kindFilter,
   onKindFilter,
+  traceRefreshKey,
   onBack,
   onEdit,
   onRegister,
@@ -26,11 +28,12 @@ export function BullSanitaryDetail({
   records: SanitaryRecord[]
   kindFilter: SanitaryKind | 'TODOS'
   onKindFilter: (value: SanitaryKind | 'TODOS') => void
+  traceRefreshKey?: number
   onBack: () => void
   onEdit?: () => void
   onRegister: (tipo: SanitaryKind) => void
 }) {
-  const [fichaView, setFichaView] = useState<'sanidad' | 'peso'>('peso')
+  const [fichaView, setFichaView] = useState<'trazabilidad' | 'sanidad' | 'peso'>('trazabilidad')
   const history = [...records]
     .filter((item) => kindFilter === 'TODOS' || item.tipo === kindFilter)
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
@@ -72,7 +75,12 @@ export function BullSanitaryDetail({
         </button> : null}
       </header>
 
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/60 p-1">
+      <div className="mb-5 grid grid-cols-3 gap-2 rounded-2xl bg-stone-200/60 p-1">
+        <SegmentButton
+          active={fichaView === 'trazabilidad'}
+          onClick={() => setFichaView('trazabilidad')}
+          label="Trazabilidad"
+        />
         <SegmentButton
           active={fichaView === 'peso'}
           onClick={() => setFichaView('peso')}
@@ -85,7 +93,9 @@ export function BullSanitaryDetail({
         />
       </div>
 
-      {fichaView === 'peso' ? (
+      {fichaView === 'trazabilidad' ? (
+        <BovineTraceability bovineId={bovine.id} refreshKey={traceRefreshKey} />
+      ) : fichaView === 'peso' ? (
         <WeightHistory weighings={weighings} />
       ) : (
         <>

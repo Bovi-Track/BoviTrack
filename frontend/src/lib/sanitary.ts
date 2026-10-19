@@ -9,7 +9,7 @@ import { supabase } from './supabase.ts'
 import { cachedRead, capture, requireConnection } from '../offline/runtime.ts'
 import type { Treatment } from '../types/dashboard.ts'
 
-// RF-UC07-02: consulta próximas aplicaciones para el hato; conserva el límite actual de 12.
+// RF-UC07-02: consulta todas las aplicaciones programadas para el hato.
 export async function loadTreatments(bovineIds: string[], farmId: string) {
   if (!bovineIds.length) return [] as Treatment[]
   const ids = [...bovineIds].sort()
@@ -19,20 +19,28 @@ export async function loadTreatments(bovineIds: string[], farmId: string) {
 // Consulta las próximas aplicaciones y adapta la relación con el toro.
 async function fetchTreatments(bovineIds: string[]) {
   if (bovineIds.length === 0) return [] as Treatment[]
-  const { data, error } = await supabase
-    .from('registro_sanitario')
-    .select(
-      'id, bovino_id, proxima_aplicacion, observaciones, bovino:bovino_id(nombre, numero_diio, identificador_interno)',
-    )
-    .in('bovino_id', bovineIds)
-    .not('proxima_aplicacion', 'is', null)
-    .order('proxima_aplicacion', { ascending: true })
-    .limit(12)
-    .retry(false)
-    .abortSignal(AbortSignal.timeout(8000))
+  const pageSize = 1000
+  const rows: Record<string, unknown>[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('registro_sanitario')
+      .select(
+        'id, bovino_id, proxima_aplicacion, observaciones, bovino:bovino_id(nombre, numero_diio, identificador_interno)',
+      )
+      .in('bovino_id', bovineIds)
+      .not('proxima_aplicacion', 'is', null)
+      .order('proxima_aplicacion', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1)
+      .retry(false)
+      .abortSignal(AbortSignal.timeout(8000))
 
-  if (error) throw error
-  return (data ?? []).map((row) => {
+    if (error) throw error
+    rows.push(...(data ?? []))
+    if ((data ?? []).length < pageSize) break
+  }
+
+  return rows.map((row) => {
     const related = row.bovino
     const bovine = Array.isArray(related) ? related[0] : related
     return {

@@ -50,11 +50,7 @@ export default function WeighingsPage() {
   }, [toast])
 
   useEffect(() => {
-    if (!activeFarm) {
-      setBovines([])
-      setRows([])
-      return
-    }
+    if (!activeFarm) return
     const farmId = activeFarm.id
     let active = true
     // Carga hato y pesajes de la finca, descartando resultados de solicitudes anteriores.

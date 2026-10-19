@@ -9,6 +9,8 @@ import {
   updateBovine,
 } from '../lib/bovines.ts'
 import { BullSanitaryDetail } from '../components/bovines/BovineDetail.tsx'
+import { DisposalSection } from '../components/bovines/DisposalSection.tsx'
+import { BovineMovementSection } from '../components/bovines/BovineMovementSection.tsx'
 import {
   kinds,
   kindById,
@@ -95,7 +97,7 @@ function emptyPlan(bovinoId = '', tipo: SanitaryKind = 'VACUNACION') {
   }
 }
 
-// RF-UC04-01, RF-UC07-01 y RF-UC07-02: coordina altas, ficha y plan sanitario del hato.
+// RF-UC03-02, RF-UC04-01, RF-UC07-01/02 y RF-UC13-01: coordina ficha, movimientos, sanidad y bajas.
 export default function BullsPage() {
   const revision = useOfflineRevision()
   const { activeFarm, role, loading } = useFarm()
@@ -122,6 +124,7 @@ export default function BullsPage() {
   } | null>(null)
   const [view, setView] = useState<'hato' | 'sanidad'>('hato')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [traceRevision, setTraceRevision] = useState(0)
   const [records, setRecords] = useState<SanitaryRecord[]>([])
   const [kindFilter, setKindFilter] = useState<SanitaryKind | 'TODOS'>('TODOS')
   const [planOpen, setPlanOpen] = useState(false)
@@ -134,17 +137,7 @@ export default function BullsPage() {
   }, [toast])
 
   useEffect(() => {
-    setRecords([])
-    setSelectedId(null)
-    setKindFilter('TODOS')
-  }, [activeFarm?.id])
-
-  useEffect(() => {
-    if (!activeFarm) {
-      setBovines([])
-      setWeighings([])
-      return
-    }
+    if (!activeFarm) return
     const farmId = activeFarm.id
     let active = true
     // Carga toros, pesajes y sanidad para la finca actual y descarta respuestas antiguas.
@@ -180,7 +173,7 @@ export default function BullsPage() {
     )
   }, [bovines, query])
 
-  const selected = bovines.find((item) => item.id === selectedId) ?? null
+  const selected = bovines.find((item) => item.id === selectedId && item.finca_id === activeFarm?.id) ?? null
 
   const visibleRecords = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -281,7 +274,7 @@ export default function BullsPage() {
     }
   }
 
-  // RF-UC04-01 (parcial): guarda la ficha; las transiciones de UC-12/13 siguen pendientes.
+  // RF-UC04-01: guarda datos básicos; estado y pertenencia se cambian mediante sus flujos.
   async function onSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selected || !canManage) return
@@ -298,7 +291,6 @@ export default function BullsPage() {
         nombre: editForm.nombre.trim() || null,
         raza: editForm.raza.trim() || null,
         color: editForm.color.trim() || null,
-        estado: editForm.estado,
       })
       setBovines((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
@@ -347,6 +339,7 @@ export default function BullsPage() {
       if (activeFarm) {
         const nextRecords = await loadSanitaryRecords(activeFarm.id)
         setRecords(nextRecords)
+        setTraceRevision((value) => value + 1)
       }
 
       setSelectedId(planForm.bovino_id)
@@ -376,12 +369,14 @@ export default function BullsPage() {
       {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
 
       {selected ? (
+        <>
         <BullSanitaryDetail
           bovine={selected}
           weighings={weighings.filter((item) => item.bovino_id === selected.id)}
           records={records.filter((item) => item.bovino_id === selected.id)}
           kindFilter={kindFilter}
           onKindFilter={setKindFilter}
+          traceRefreshKey={revision + traceRevision}
           onBack={() => {
             setSelectedId(null)
             setKindFilter('TODOS')
@@ -389,6 +384,33 @@ export default function BullsPage() {
           onEdit={canManage ? openEdit : undefined}
           onRegister={(tipo) => openPlan(selected.id, tipo)}
         />
+        <DisposalSection
+          key={`${selected.id}:${role}`}
+          bovine={selected}
+          admin={role === 'admin'}
+          farmActive={Boolean(activeFarm?.activo)}
+          onRegistered={() => {
+            setBovines((rows) => rows.map((row) => row.id === selected.id ? { ...row, estado: 'BAJA' } : row))
+            setTraceRevision((value) => value + 1)
+          }}
+        />
+        <BovineMovementSection
+          key={`${selected.id}:movimientos:${role}`}
+          bovine={selected}
+          onRegistered={(result) => {
+            setTraceRevision((value) => value + 1)
+            if (result.finca_id === activeFarm?.id) {
+              setBovines((rows) => rows.map((row) => row.id === result.bovino_id ? { ...row, estado: result.estado } : row))
+            } else {
+              setBovines((rows) => rows.filter((row) => row.id !== result.bovino_id))
+              setRecords((rows) => rows.filter((row) => row.bovino_id !== result.bovino_id))
+              setWeighings((rows) => rows.filter((row) => row.bovino_id !== result.bovino_id))
+              setSelectedId(null)
+              setToast({ message: 'Movimiento registrado. El toro está en la finca de destino.', tone: 'ok' })
+            }
+          }}
+        />
+        </>
       ) : (
         <>
           <header className="mb-5 flex items-start justify-between gap-3">
@@ -797,6 +819,7 @@ export default function BullsPage() {
             <select
               id="edit-estado"
               required
+              disabled
               value={editForm.estado}
               onChange={(event) =>
                 setEditForm((current) => ({
@@ -808,8 +831,9 @@ export default function BullsPage() {
             >
               <option value="ACTIVO">Activo</option>
               <option value="INACTIVO">Inactivo</option>
-              {['VENDIDO', 'BAJA', 'MUERTO'].includes(editForm.estado) ? <option value={editForm.estado}>{bovineStatusLabel(editForm.estado)}</option> : null}
+              {['VENDIDO', 'BAJA'].includes(editForm.estado) ? <option value={editForm.estado}>{bovineStatusLabel(editForm.estado)}</option> : null}
             </select>
+            <p className="mt-1 text-xs text-stone-500">Usa los flujos de movimientos, venta o baja para cambiar el estado.</p>
           </Field>
           {editError ? (
             <p className="text-sm text-red-600" role="alert">

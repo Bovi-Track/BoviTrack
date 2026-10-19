@@ -17,40 +17,48 @@ export default function JoinFarmPage() {
   const token = params.get('token') ?? ''
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
-  const [state, setState] = useState<State>({ status: 'loading' })
-  const attempted = useRef(false)
+  const attemptKey = `${user?.id ?? ''}:${token}`
+  const [result, setResult] = useState<{ key: string; state: State } | null>(null)
+  const attempted = useRef<{ key: string; request: ReturnType<typeof acceptFarmInvitation> } | null>(null)
+  const state: State = authLoading ? { status: 'loading' }
+    : !token ? { status: 'error', message: 'El enlace de invitación no contiene un token válido.' }
+      : !user ? { status: 'needs-auth', token }
+        : result?.key === attemptKey ? result.state : { status: 'loading' }
 
   useEffect(() => {
-    if (authLoading) return
-    if (!token) {
-      setState({ status: 'error', message: 'El enlace de invitación no contiene un token válido.' })
-      return
-    }
+    if (authLoading || !token) return
 
     if (!user) {
       // Guardar token para despues del login/registro
       savePendingInvite(token)
-      setState({ status: 'needs-auth', token })
       return
     }
 
-    if (attempted.current) return
-    attempted.current = true
+    if (attempted.current?.key !== attemptKey) {
+      attempted.current = { key: attemptKey, request: acceptFarmInvitation(token) }
+    }
+    const request = attempted.current.request
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | undefined
 
     void (async () => {
       try {
-        const farm = await acceptFarmInvitation(token)
+        const farm = await request
+        if (!active) return
         clearPendingInvite(token)
-        setState({ status: 'success', farmName: farm.nombre })
-        setTimeout(() => navigate('/inicio', { replace: true }), 2500)
+        setResult({ key: attemptKey, state: { status: 'success', farmName: farm.nombre } })
+        timer = setTimeout(() => navigate('/inicio', { replace: true }), 2500)
       } catch (err) {
-        setState({
-          status: 'error',
-          message: err instanceof Error ? err.message : 'No se pudo procesar la invitación.',
-        })
+        if (active) setResult({ key: attemptKey, state: {
+          status: 'error', message: err instanceof Error ? err.message : 'No se pudo procesar la invitación.',
+        } })
       }
     })()
-  }, [authLoading, user, token, navigate])
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [authLoading, user, token, attemptKey, navigate])
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-cream px-4">
