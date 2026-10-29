@@ -10,9 +10,13 @@ export function projectOperation(entry: CachedData, op: OfflineOperation, result
   if (Array.isArray(entry.value)) {
     const rows = entry.value as Row[]
     if (op.kind === 'weighing' && entry.key.startsWith('weighings:')) {
-      const ids = entry.key.slice('weighings:'.length).split(',')
-      if (ids.includes(String(value.bovino_id))) return [...rows.filter((r) => r.id !== value.id), value]
-        .sort((a, b) => String(a.fecha_pesaje).localeCompare(String(b.fecha_pesaje)))
+      const suffix = entry.key.slice('weighings:'.length)
+      const matchesFarm = suffix === op.farmId
+      const matchesBovine = suffix.split(',').includes(String(value.bovino_id))
+      if (matchesFarm || matchesBovine) {
+        return [...rows.filter((r) => r.id !== value.id), value]
+          .sort((a, b) => String(a.fecha_pesaje).localeCompare(String(b.fecha_pesaje)))
+      }
     }
     if (op.kind === 'sanitary' && entry.key.startsWith('sanitary:')) {
       return [...rows.filter((r) => r.id !== value.id), value]

@@ -28,33 +28,33 @@ export function writePendingWeighings(items: PendingWeighing[]) {
   localStorage.setItem(PENDING_WEIGHS_KEY, JSON.stringify(items))
 }
 
+function asWeighings(data: unknown) {
+  return (Array.isArray(data) ? data : []).map((row) => {
+    const item = row as Weighing
+    return { ...item, peso_kg: Number(item.peso_kg) }
+  })
+}
+
 // RF-UC05-01 y RF-UC06-02: consulta y normaliza los pesajes del hato solicitado.
 export async function loadWeighings(bovineIds: string[], farmId: string) {
   if (!bovineIds.length) return [] as Weighing[]
-  const ids = [...bovineIds].sort()
-  return cachedRead(`weighings:${ids.join(',')}`, farmId, () => fetchWeighings(ids))
+  const allowed = new Set(bovineIds)
+  const rows = await cachedRead(`weighings:${farmId}`, farmId, () => fetchWeighings(farmId))
+  return rows.filter((item) => allowed.has(item.bovino_id))
 }
 
-// Consulta los pesajes online y normaliza los valores numéricos de PostgreSQL.
-async function fetchWeighings(bovineIds: string[]) {
-  if (bovineIds.length === 0) return [] as Weighing[]
+// Consulta los pesajes autorizados de la finca mediante la RPC de consulta.
+async function fetchWeighings(farmId: string) {
   const { data, error } = await supabase
-    .from('pesaje')
-    .select('id, bovino_id, peso_kg, fecha_pesaje, es_inicial, created_at')
-    .in('bovino_id', bovineIds)
-    .order('fecha_pesaje', { ascending: true })
-    .order('created_at', { ascending: true })
-    .retry(false)
+    .rpc('obtener_pesajes_finca', { p_finca_id: farmId })
     .abortSignal(AbortSignal.timeout(8000))
 
   if (error) throw error
-  return (data ?? []).map((row) => ({
-    ...row,
-    peso_kg: Number(row.peso_kg),
-  })) as Weighing[]
+  return asWeighings(data)
 }
 
 // RF-UC05-01 y RF-TR-01: valida y conserva un pesaje para sincronizarlo sin duplicados.
+// La confirmación online ocurre en procesar_operacion_offline → registrar_pesaje.
 export async function saveWeighing(
   payload: PendingWeighing,
   farmId: string,
@@ -62,5 +62,6 @@ export async function saveWeighing(
   if (!Number.isFinite(payload.peso_kg) || payload.peso_kg <= 0 || !isValidIsoDate(payload.fecha_pesaje)) {
     throw new Error('Ingresa un peso positivo y una fecha válida.')
   }
-  return capture(farmId, 'weighing', payload, (id): Weighing => ({ id, ...payload }))
+  const peso_kg = Math.round(payload.peso_kg * 100) / 100
+  return capture(farmId, 'weighing', { ...payload, peso_kg }, (id): Weighing => ({ id, ...payload, peso_kg }))
 }

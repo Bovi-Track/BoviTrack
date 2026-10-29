@@ -2,9 +2,6 @@ import { supabase } from './supabase.ts'
 import { cachedRead, requireConnection } from '../offline/runtime.ts'
 import type { Bovine, CreateBovineInput, UpdateBovineInput } from '../types/dashboard.ts'
 
-const BOVINE_COLUMNS =
-  'id, finca_id, fecha_ingreso, numero_diio, identificador_interno, nombre, raza, color, sexo, estado'
-
 // Traduce errores de unicidad o guardado del toro a mensajes de interfaz.
 export function bovineErrorMessage(cause: unknown) {
   const error = cause as { code?: string; message?: string } | null
@@ -15,23 +12,23 @@ export function bovineErrorMessage(cause: unknown) {
   return 'No se pudo guardar el bovino.'
 }
 
+function asBovines(data: unknown) {
+  return (Array.isArray(data) ? data : []) as Bovine[]
+}
+
 // RF-UC04-01: consulta los toros de una finca con sus datos básicos y estado.
 export async function loadBovines(farmId: string) {
   return cachedRead(`bovines:${farmId}`, farmId, () => fetchBovines(farmId))
 }
 
-// Obtiene los toros de Supabase para actualizar la copia de la finca.
+// Obtiene los toros autorizados de la finca mediante la RPC de consulta.
 async function fetchBovines(farmId: string) {
   const { data, error } = await supabase
-    .from('bovino')
-    .select(BOVINE_COLUMNS)
-    .eq('finca_id', farmId)
-    .order('created_at', { ascending: false })
-    .retry(false)
+    .rpc('obtener_bovinos_finca', { p_finca_id: farmId })
     .abortSignal(AbortSignal.timeout(8000))
 
   if (error) throw error
-  return (data ?? []) as Bovine[]
+  return asBovines(data)
 }
 
 // RF-UC04-01: crea un toro reutilizando la operación de alta múltiple.
@@ -44,26 +41,25 @@ export async function createBovine(payload: CreateBovineInput) {
 // RF-UC04-01 y RF-UC03-02: da de alta toros; el trigger SQL conserva la asignación inicial.
 export async function createBovines(payloads: CreateBovineInput[]) {
   requireConnection()
-  const { data, error } = await supabase
-    .from('bovino')
-    .insert(payloads)
-    .select(BOVINE_COLUMNS)
-
+  const { data, error } = await supabase.rpc('registrar_bovinos', { p_bovinos: payloads })
   if (error) throw error
-  return (data ?? []) as Bovine[]
+  const created = asBovines(data)
+  if (!created.length) throw new Error('No se pudo guardar el bovino.')
+  return created
 }
 
 // RF-UC04-01: actualiza datos básicos; movimientos, venta y baja usan sus propias RPC.
 export async function updateBovine(id: string, patch: UpdateBovineInput) {
   requireConnection()
-  const { data, error } = await supabase
-    .from('bovino')
-    .update(patch)
-    .eq('id', id)
-    .select(BOVINE_COLUMNS)
-    .single()
-
+  const { data, error } = await supabase.rpc('actualizar_bovino', {
+    p_id: id,
+    p_identificador_interno: patch.identificador_interno,
+    p_nombre: patch.nombre,
+    p_raza: patch.raza,
+    p_color: patch.color,
+  })
   if (error) throw error
+  if (!data) throw new Error('No se pudo guardar el bovino.')
   return data as Bovine
 }
 

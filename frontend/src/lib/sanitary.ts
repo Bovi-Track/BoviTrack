@@ -7,50 +7,37 @@ import {
 } from '../types/sanitary.ts'
 import { supabase } from './supabase.ts'
 import { cachedRead, capture, requireConnection } from '../offline/runtime.ts'
+import { loadBovines } from './bovines.ts'
 import type { Treatment } from '../types/dashboard.ts'
 
-// RF-UC07-02: consulta todas las aplicaciones programadas para el hato.
+// RF-UC07-02: arma las alertas sanitarias con las RPC de historial y de toros.
 export async function loadTreatments(bovineIds: string[], farmId: string) {
   if (!bovineIds.length) return [] as Treatment[]
-  const ids = [...bovineIds].sort()
-  return cachedRead(`treatments:${ids.join(',')}`, farmId, () => fetchTreatments(ids))
-}
-
-// Consulta las próximas aplicaciones y adapta la relación con el toro.
-async function fetchTreatments(bovineIds: string[]) {
-  if (bovineIds.length === 0) return [] as Treatment[]
-  const pageSize = 1000
-  const rows: Record<string, unknown>[] = []
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase
-      .from('registro_sanitario')
-      .select(
-        'id, bovino_id, proxima_aplicacion, observaciones, bovino:bovino_id(nombre, numero_diio, identificador_interno)',
-      )
-      .in('bovino_id', bovineIds)
-      .not('proxima_aplicacion', 'is', null)
-      .order('proxima_aplicacion', { ascending: true })
-      .order('id', { ascending: true })
-      .range(offset, offset + pageSize - 1)
-      .retry(false)
-      .abortSignal(AbortSignal.timeout(8000))
-
-    if (error) throw error
-    rows.push(...(data ?? []))
-    if ((data ?? []).length < pageSize) break
-  }
-
-  return rows.map((row) => {
-    const related = row.bovino
-    const bovine = Array.isArray(related) ? related[0] : related
-    return {
-      id: row.id,
-      bovino_id: row.bovino_id,
-      proxima_aplicacion: row.proxima_aplicacion,
-      observaciones: row.observaciones,
-      bovino: bovine ?? undefined,
-    }
-  }) as Treatment[]
+  const allowed = new Set(bovineIds)
+  const [records, bovines] = await Promise.all([
+    loadSanitaryRecords(farmId),
+    loadBovines(farmId),
+  ])
+  const byId = new Map(bovines.map((item) => [item.id, item]))
+  return records
+    .filter((item) => Boolean(item.proxima) && allowed.has(item.bovino_id))
+    .sort((a, b) => a.proxima.localeCompare(b.proxima) || a.id.localeCompare(b.id))
+    .map((item) => {
+      const bovine = byId.get(item.bovino_id)
+      return {
+        id: item.id,
+        bovino_id: item.bovino_id,
+        proxima_aplicacion: item.proxima,
+        observaciones: item.observaciones || null,
+        bovino: bovine
+          ? {
+              nombre: bovine.nombre,
+              numero_diio: bovine.numero_diio,
+              identificador_interno: bovine.identificador_interno,
+            }
+          : undefined,
+      } satisfies Treatment
+    })
 }
 
 // RF-UC07-01: consulta el historial sanitario devuelto por la RPC de la finca.
