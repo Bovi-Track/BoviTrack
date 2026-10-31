@@ -82,7 +82,7 @@ export function DisposalSection({ bovine, admin, farmActive, onRegistered }: {
   }
 
   const maintenanceField = (required: boolean) => (
-    <Field id="baja-mantenimiento" label="Mantenimiento diario por toro (CRC/día)">
+    <Field id="baja-mantenimiento" label="Alimentación y otros cuidados (CRC/toro/día)">
       <input id="baja-mantenimiento" type="number" min="0" step="0.01" required={required}
         value={maintenance} onChange={(event) => setMaintenance(event.target.value)} className={fieldClass} />
     </Field>
@@ -114,7 +114,7 @@ export function DisposalSection({ bovine, admin, farmActive, onRegistered }: {
           <p>Mantenimiento acumulado: {money(loss.mantenimiento_acumulado)}</p>
           {loss.perdida_economica == null && farmActive ? (
             <form onSubmit={complete} className="space-y-3">
-              <p>La pérdida suma compra, flete y mantenimiento desde el ingreso hasta la baja. Los costos desconocidos quedan pendientes.</p>
+              <p>La pérdida suma compra, flete y el costo diario promedio de alimentación y otros cuidados desde el ingreso hasta la baja. Los costos desconocidos quedan pendientes.</p>
               {maintenanceField(true)}
               <button disabled={busy} className="min-h-11 rounded-xl bg-bovi px-4 font-medium text-white disabled:opacity-50">
                 {busy ? 'Guardando…' : 'Calcular pérdida pendiente'}

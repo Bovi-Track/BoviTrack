@@ -73,7 +73,7 @@ export default function SalesPage() {
 
   const activeBovines = useMemo(() => bovines.filter((item) => item.estado === 'ACTIVO'), [bovines])
   const selectedBovine = activeBovines.find((item) => item.id === selectedBovineId)
-  const preview: SalePreview | null = selectedBovine
+  const preview: SalePreview | null = selectedBovine && dailyMaintenance.trim() !== ''
     ? calculateSalePreview(
       selectedBovine,
       costs.find((item) => item.id === selectedBovine.id),
@@ -164,7 +164,7 @@ export default function SalesPage() {
                 <input id="sale-price" type="number" required min="0.01" max="99999999.99" step="0.01" inputMode="decimal"
                   value={pricePerKg} onChange={(event) => setPricePerKg(event.target.value)} className={fieldClass} />
               </Field>
-              <Field id="sale-maintenance" label="Mantenimiento diario por toro (CRC/día)">
+              <Field id="sale-maintenance" label="Alimentación y otros cuidados (CRC/toro/día)">
                 <input id="sale-maintenance" type="number" required min="0" step="0.01" inputMode="decimal"
                   value={dailyMaintenance} onChange={(event) => setDailyMaintenance(event.target.value)} className={fieldClass} />
               </Field>
@@ -180,13 +180,13 @@ export default function SalesPage() {
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-stone-600">
                   <PreviewRow label="Ingreso bruto" value={money.format(preview.ingresoBruto)} />
                   <PreviewRow label="Costo de compra" value={preview.costoCompra == null ? 'No disponible' : money.format(preview.costoCompra)} />
-                  <PreviewRow label={`Mantenimiento (${preview.diasMantenimiento} días)`} value={money.format(preview.mantenimientoAcumulado)} />
+                  <PreviewRow label={`Alimentación y cuidados (${preview.diasMantenimiento} días)`} value={money.format(preview.mantenimientoAcumulado)} />
                   <PreviewRow label="Rentabilidad final" value={preview.rentabilidad == null ? 'No disponible' : money.format(preview.rentabilidad)} />
                 </dl>
                 {preview.rentabilidad == null ? <p className="mt-2 text-xs text-amber-800">Falta compra, precio/kg o pesaje inicial. La venta se puede registrar, pero no se inventará una rentabilidad.</p> : null}
               </div>
             ) : null}
-            <p className="text-xs text-stone-400">La rentabilidad resta del ingreso bruto el costo de compra y flete registrados, más mantenimiento diario por los días desde el ingreso. No incluye costos de inventario o sanidad no vinculados al toro.</p>
+            <p className="text-xs text-stone-400">Ingresa el costo diario promedio por toro: por ejemplo, 2 kg de alimento a CRC 300/kg más CRC 100 de otros cuidados = CRC 700/día. Se multiplica por los días transcurridos desde el ingreso hasta la venta (el mismo día son 0 días). La ganancia resta compra, flete y ese total del ingreso de venta. Incluye aquí los gastos que quieras considerar; no se descuentan automáticamente del inventario.</p>
             <button type="submit" disabled={!preview || saving}
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-bovi px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
               <CircleDollarSign className="size-4" /> Revisar y confirmar venta

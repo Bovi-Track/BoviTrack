@@ -88,6 +88,9 @@ export function parseInventoryQuantity(value: string): number {
 export function inventoryErrorMessage(cause: unknown): string {
   const error = cause as { code?: string; message?: string } | null
   if (error?.message?.includes('INVENTARIO_')) return error.message.replace(/^.*?INVENTARIO_[A-Z_]+:\s*/, '')
+  if (error?.code === '23505' && error.message?.includes('insumo_finca_nombre_unico_idx')) {
+    return 'Ya existe un insumo con ese nombre en esta finca, incluso entre los inactivos. Revisa el catálogo; para agregar existencias usa una entrada del insumo existente.'
+  }
   if (error?.code === '42501') return 'No tienes permiso para esta operación en la finca seleccionada.'
   if (error?.code === 'PGRST202') return 'Las funciones de inventario todavía no están disponibles en Supabase.'
   if (error?.message && /fetch|network|offline|conexión/i.test(error.message)) {

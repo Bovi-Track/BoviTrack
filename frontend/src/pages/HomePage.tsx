@@ -397,7 +397,7 @@ export default function HomePage() {
                     className={fieldClass}
                   />
                 </Field>
-                <Field id="daily-maintenance" label="Mantenimiento diario por toro (CRC/día)">
+                <Field id="daily-maintenance" label="Alimentación y otros cuidados (CRC/toro/día)">
                   <input
                     id="daily-maintenance"
                     type="number"
@@ -434,7 +434,7 @@ export default function HomePage() {
                             <span>GMD 56 días: <strong>{hint.recentGmd == null ? '—' : `${saleUnit.format(hint.recentGmd)} kg/día`}</strong></span>
                             <span>Pesajes válidos: <strong>{hint.weighings}/8+</strong></span>
                             <span>Compra + flete: <strong>{saleCurrency.format(hint.acquisitionCost ?? 0)}</strong></span>
-                            <span>Mantenimiento acumulado: <strong>{saleCurrency.format(hint.maintenanceCost ?? 0)}</strong></span>
+                            <span>Alimentación y cuidados: <strong>{saleCurrency.format(hint.maintenanceCost ?? 0)}</strong></span>
                             <span>Costo acumulado: <strong>{saleCurrency.format(hint.accumulatedCost ?? 0)}</strong></span>
                             <span>Equilibrio: <strong>{saleCurrency.format(hint.breakEvenPrice ?? 0)}/kg</strong></span>
                             <span>Esperado: <strong>{saleCurrency.format(salePrice ?? 0)}/kg</strong></span>
@@ -452,7 +452,7 @@ export default function HomePage() {
                 </ul>
               )}
               <p className="mt-4 text-xs text-stone-400">
-                La evaluación suma compra, flete y el mantenimiento ingresado. No distribuye costos de inventario o sanidad porque no están vinculados históricamente a cada toro.
+                Ingresa el costo diario promedio por toro de alimentación y otros cuidados. Ejemplo: 2 kg a CRC 300/kg + CRC 100 de cuidados = CRC 700/día. Se aplica a los días transcurridos desde el ingreso; no se descuenta automáticamente del inventario. Al registrar la venta, usa el promedio correspondiente al periodo completo.
               </p>
             </Card>
             <div className="grid grid-cols-2 gap-2">
