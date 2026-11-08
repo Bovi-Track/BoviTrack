@@ -110,7 +110,7 @@ Queda fuera de este plan, por exclusión explícita de la ERS (secciones 1.2.3, 
 | Prueba de carga hasta el dimensionamiento máximo (20 fincas, 2 000 toros y 10 usuarios concurrentes por finca) | Sección 2.4. La concurrencia que sí se prueba es la que altera saldos o duplica registros (UC-08 y UC-09).                                      |
 | Administración de infraestructura, copias de seguridad, dominio y custodia posterior a la entrega              | Secciones 2.3 y 2.4. Corresponden al cliente.                                                                                                   |
 | Medición del KPI-01 como reducción del 40 % frente al registro manual                                          | El KPI exige una línea base manual que este plan no fija. El criterio ejecutable asociado es RN-UX-01: registro de campo en menos de 3 minutos. |
-| Informe de ejecución, defectos encontrados, evidencias y criterio de liberación ya aplicado                    | Documento independiente.                                                                                                                        |
+| Informe de pruebas, defectos encontrados, evidencias y criterio de liberación ya aplicado                     | Documento independiente: `docs/Informe-de-Pruebas-BoviTrack.md`.                                                                                |
 
 
 
@@ -667,7 +667,7 @@ Esta matriz es de planificación. No indica si un caso fue ejecutado ni si pasó
 | Entregable           | Contenido                                                               | Relación con este plan                 |
 | -------------------- | ----------------------------------------------------------------------- | -------------------------------------- |
 | PTP-BOVITRACK-001    | Este plan de pruebas                                                    | Documento de diseño. Versión 1.1.      |
-| Informe de ejecución | Resultado real, estado, evidencias, defectos y conclusión de aceptación | Documento aparte. No se adelanta aquí. |
+| ITP-BOVITRACK-001    | Informe de pruebas: resultado real, estado, evidencias, defectos y conclusión | Documento aparte: `docs/Informe-de-Pruebas-BoviTrack.md`. Este plan no copia esos resultados. |
 
 
 Al ejecutar, no se modifican los resultados esperados para ajustarlos a la implementación. Si un oráculo de la sección 2.3 resultara incompatible con una lectura posterior y acordada de la ERS, la corrección se hace mediante una nueva versión de este plan, antes de reejecutar los casos afectados.
