@@ -71,7 +71,7 @@ export async function iniciarSesion(
   if (!email) {
     return {
       data: { user: null, session: null },
-      error: { message: 'Correo, usuario o contraseña incorrectos' },
+      error: { message: 'Credenciales incorrectas' },
     }
   }
 
@@ -141,7 +141,7 @@ export function mensajeAuth(message: string) {
   const normalized = message.toLowerCase()
 
   if (normalized.includes('invalid login credentials')) {
-    return 'Correo, usuario o contraseña incorrectos'
+    return 'Credenciales incorrectas'
   }
   if (normalized.includes('email not confirmed')) {
     return 'Confirma tu correo antes de iniciar sesión'

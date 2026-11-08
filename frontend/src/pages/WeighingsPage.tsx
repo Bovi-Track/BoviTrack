@@ -143,7 +143,7 @@ export default function WeighingsPage() {
       return
     }
     if (!Number.isFinite(peso) || peso <= 0) {
-      setError('Ingresa un peso válido en kg.')
+      setError('Error: El peso ingresado está fuera de rango')
       return
     }
 

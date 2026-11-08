@@ -59,8 +59,11 @@ export async function saveWeighing(
   payload: PendingWeighing,
   farmId: string,
 ) {
-  if (!Number.isFinite(payload.peso_kg) || payload.peso_kg <= 0 || !isValidIsoDate(payload.fecha_pesaje)) {
-    throw new Error('Ingresa un peso positivo y una fecha válida.')
+  if (!Number.isFinite(payload.peso_kg) || payload.peso_kg <= 0) {
+    throw new Error('Error: El peso ingresado está fuera de rango')
+  }
+  if (!isValidIsoDate(payload.fecha_pesaje)) {
+    throw new Error('Ingresa una fecha válida.')
   }
   const peso_kg = Math.round(payload.peso_kg * 100) / 100
   return capture(farmId, 'weighing', { ...payload, peso_kg }, (id): Weighing => ({ id, ...payload, peso_kg }))
