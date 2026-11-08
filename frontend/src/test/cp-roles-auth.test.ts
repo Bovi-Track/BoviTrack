@@ -7,7 +7,7 @@ import { passwordIssues, validarPasswordRegistro } from '../lib/passwordPolicy.t
 describe('UC-14 autenticación', () => {
   it('CP-AUTH-02 traduce unas credenciales inválidas', () => {
     expect(mensajeAuth('Invalid login credentials')).toBe(
-      'Correo, usuario o contraseña incorrectos',
+      'Credenciales incorrectas',
     )
   })
 

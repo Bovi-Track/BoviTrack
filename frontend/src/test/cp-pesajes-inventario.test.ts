@@ -31,11 +31,11 @@ describe('UC-05 pesajes', () => {
     await expect(saveWeighing(
       { bovino_id: 'bt-001', peso_kg: 0, fecha_pesaje: '2026-10-17' },
       'finca-norte',
-    )).rejects.toThrow(/peso positivo/)
+    )).rejects.toThrow('Error: El peso ingresado está fuera de rango')
     await expect(saveWeighing(
       { bovino_id: 'bt-001', peso_kg: -10, fecha_pesaje: '2026-10-17' },
       'finca-norte',
-    )).rejects.toThrow(/peso positivo/)
+    )).rejects.toThrow('Error: El peso ingresado está fuera de rango')
   })
 
   it('CP-PES-05 la misma captura no se agrega dos veces al historial local', () => {

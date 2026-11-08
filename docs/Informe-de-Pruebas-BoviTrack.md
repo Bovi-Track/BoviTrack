@@ -25,7 +25,7 @@ La suite automatizada pasó completa el 8 de noviembre de 2026: 81 pruebas del f
 
 La bitácora de requisitos, actualizada el 18 de octubre de 2026, aporta evidencia de sistema en Chromium contra Supabase para la mayoría de los requisitos funcionales. Esa evidencia usa fincas y cuentas de control de calidad, no la línea base del plan (`admin.norte@bovitrack.test`, BT-001, Finca Norte). Por eso esos casos quedan **observados en el requisito**, no reejecutados como fila del plan.
 
-De las 110 filas del plan, 57 quedaron superadas, 47 observadas en Supabase con datos de control de calidad, 2 con desviación de texto y 4 bloqueadas. No hay aceptación del producto porque las filas observadas no se repitieron con la línea base del plan. Siguen abiertos los tiempos de CP-NFR-01 y CP-NFR-02, y el recorrido de CP-NFR-03 en Edge, Chrome y los tres tamaños de pantalla. Safari no está instalado en este Windows. La cola antigua de Firefox, en [bovitrack.pages.dev](https://bovitrack.pages.dev), devolvió `null`.
+De las 110 filas del plan, 59 quedaron superadas, 47 observadas en Supabase con datos de control de calidad y 4 bloqueadas. No hay aceptación del producto porque las filas observadas no se repitieron con la línea base del plan. Siguen abiertos los tiempos de CP-NFR-01 y CP-NFR-02, y el recorrido de CP-NFR-03 en Edge, Chrome y los tres tamaños de pantalla. Safari no está instalado en este Windows. La cola antigua de Firefox, en [bovitrack.pages.dev](https://bovitrack.pages.dev), devolvió `null`.
 
 ## 2. Entorno de lo ejecutado en este ciclo
 
@@ -60,7 +60,7 @@ Un caso superado en el cliente no certifica la transacción de PostgreSQL ni el 
 | ID | Estado | Resultado real | Evidencia |
 | --- | --- | --- | --- |
 | CP-AUTH-01 | Observado | Administrador y personal iniciaron y cerraron sesión reales. La suite solo comprueba que, sin sesión, una ruta privada vuelve al inicio de sesión. | Bitácora RF-UC14-01. `cp-acceso-interfaz.test.tsx` |
-| CP-AUTH-02 | Desviación | El cliente muestra «Correo, usuario o contraseña incorrectos». El plan cita «Credenciales incorrectas». No se repitió el usuario `nadie@bovitrack.test` contra Supabase. | DEF-01. `cp-roles-auth.test.ts` |
+| CP-AUTH-02 | Superado | El cliente muestra «Credenciales incorrectas» y no abre sesión. No se repitió el usuario `nadie@bovitrack.test` contra Supabase en este ciclo. | DEF-01 cerrado. `cp-roles-auth.test.ts` |
 | CP-AUTH-03 | Superado | `abc12` no se acepta. La política vigente pide 8 caracteres, mayúscula, minúscula, número y símbolo. Ese mínimo cumple «al menos 6». | `passwordPolicy.ts`, `cp-roles-auth.test.ts` |
 | CP-AUTH-04 | Observado | Una cuenta inactiva real fue rechazada. La sesión se revalida al entrar, al reconectar, al enfocar y cada 30 segundos. | Bitácora RF-UC14-01 |
 | CP-AUTH-05 | Superado | El 8 de noviembre de 2026 Supabase envió el correo a `francisco.kuoliu@gmail.com`. El enlace devolvió una sesión de recuperación para esa cuenta, la contraseña se actualizó y el ingreso con la nueva respondió 200. Otra contraseña fue rechazada. El sitio publicado ya incluye la corrección que conserva el enlace y abre `/restablecer-contrasena` antes de que el enrutador borre la sesión. | Solicitud `recover` 200. `PUT /auth/v1/user` 200. `grant_type=password` 200 y 400. Paquete publicado `index-dO1Hcsqg.js`. |
@@ -110,7 +110,7 @@ Un caso superado en el cliente no certifica la transacción de PostgreSQL ni el 
 | ID | Estado | Resultado real | Evidencia |
 | --- | --- | --- | --- |
 | CP-PES-01 | Superado | Un pesaje de 485 kg queda en la cola a nombre del usuario de la sesión. En Supabase, administrador y personal persistieron pesajes con el responsable autenticado. El texto de éxito de la fila no se contrastó en pantalla en este ciclo. | `cp-captura-local.test.ts`. Bitácora RF-UC05-01 |
-| CP-PES-02 | Desviación | Peso 0 y peso −10 se rechazan y no se guardan. El texto del cliente es de peso positivo y fecha válida, no «Error: El peso ingresado está fuera de rango». | DEF-02. `cp-pesajes-inventario.test.ts` |
+| CP-PES-02 | Superado | Peso 0 y peso −10 se rechazan, no se guardan y el mensaje es «Error: El peso ingresado está fuera de rango». Una fecha inválida conserva su propio mensaje. | DEF-02 cerrado. `cp-pesajes-inventario.test.ts` |
 | CP-PES-03 | Observado | Un pesaje fuera de la finca autorizada fue rechazado. Revocar la membresía impide la captura. | Bitácora RF-UC05-01 |
 | CP-PES-04 | Observado | El responsable guardado es el usuario autenticado. | Bitácora RF-UC05-01 |
 | CP-PES-05 | Superado | El mismo identificador no entra dos veces a la cola ni al historial local. En Supabase, el reintento y la respuesta perdida no duplicaron la fila. | `cp-pesajes-inventario.test.ts`, `cp-cola-local.test.ts`. Bitácora RF-UC05-01 y RF-TR-02 |
@@ -194,8 +194,8 @@ Un caso superado en el cliente no certifica la transacción de PostgreSQL ni el 
 
 | ID | Severidad | Caso | Estado | Qué se observó |
 | --- | --- | --- | --- | --- |
-| DEF-01 | Menor | CP-AUTH-02 | Abierto | El texto de credenciales no es el citado por el plan. El acceso sí se niega. |
-| DEF-02 | Menor | CP-PES-02 | Abierto | El peso no positivo se rechaza con otra frase. No entra al historial. |
+| DEF-01 | Menor | CP-AUTH-02 | Cerrado en el código | El mensaje pasó a «Credenciales incorrectas». El sitio publicado muestra el texto anterior hasta la próxima publicación. |
+| DEF-02 | Menor | CP-PES-02 | Cerrado en el código | El peso no positivo muestra «Error: El peso ingresado está fuera de rango» y no se guarda. El sitio publicado muestra el texto anterior hasta la próxima publicación. |
 | DEF-03 | Menor | CP-AUTH-05 | Cerrado | El correo, el cambio y el ingreso con la contraseña nueva se comprobaron el 8 de noviembre de 2026. Después de publicar, [bovitrack.pages.dev](https://bovitrack.pages.dev) sirve `index-dO1Hcsqg.js`, que conserva el enlace de recuperación y lo lleva a `/restablecer-contrasena` antes de cargar la aplicación. |
 | DEF-04 | — | RF-TR-01, cola antigua | Cerrado en este Firefox | El 8 de noviembre de 2026, en Firefox y en bovitrack.pages.dev, `localStorage` de `bovitrack-pending-pesajes` devolvió `null`. No hay pesajes viejos que enviar ni descartar en ese perfil. Las capturas nuevas siguen aisladas por usuario. |
 
@@ -211,7 +211,7 @@ No se registran defectos de flete, de ventana de 56 días, de saldo negativo ni 
 | 4. Prioridad Media, o desviación escrita | El correo de recuperación, el cambio de contraseña y el ingreso con la nueva ya se comprobaron. La pantalla publicada ya conserva el enlace. PDF, alertas y existencias sí tienen evidencia. |
 | 5. Sin defectos críticos o mayores abiertos en prioridad Alta | DEF-04 quedó cerrado para el Firefox revisado. No queda un defecto mayor abierto por esa cola. |
 
-Cada fila de la matriz quedó superada, observada, con desviación o bloqueada, y cada bloqueo tiene su causa. Con eso el ciclo de este informe queda cerrado. La aceptación del producto sigue pendiente por los criterios 1 y 2 de la sección 3.1: las filas observadas usaron datos de control de calidad, no la línea base del plan.
+Cada fila de la matriz quedó superada, observada o bloqueada, y cada bloqueo tiene su causa. Con eso el ciclo de este informe queda cerrado. La aceptación del producto sigue pendiente por los criterios 1 y 2 de la sección 3.1: las filas observadas usaron datos de control de calidad, no la línea base del plan.
 
 ## 7. Cierre
 
@@ -219,9 +219,9 @@ Este informe es el cierre del ciclo del 8 de noviembre de 2026. No queda una fil
 
 | Estado | Filas |
 | --- | ---: |
-| Superado | 57 |
+| Superado | 59 |
 | Observado | 47 |
-| Desviación | 2 |
+| Desviación | 0 |
 | Bloqueado | 4 |
 | Total | 110 |
 
