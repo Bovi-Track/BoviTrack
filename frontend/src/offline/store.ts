@@ -3,6 +3,14 @@ import type { CachedData, OfflineOperation } from './types.ts'
 
 let connection: Promise<IDBDatabase> | undefined
 
+// Cierra la conexión local para que la siguiente lectura vuelva a abrirla.
+export async function closeOfflineDatabase() {
+  if (!connection) return
+  const db = await connection
+  db.close()
+  connection = undefined
+}
+
 // Abre los dos almacenes locales: respuestas autorizadas y operaciones pendientes.
 function openDatabase() {
   connection ??= new Promise<IDBDatabase>((resolve, reject) => {

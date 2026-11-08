@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/useAuth.ts'
 import { useFarm } from '../../context/useFarm.ts'
 
 // RF-UC14-03: limita rutas administrativas y descarta pantallas de otra finca o rol.
-function FarmScreen() {
+export function FarmScreen() {
   const { activeFarm, role, loadedUserId, loading } = useFarm()
   const { pathname } = useLocation()
   if (loading && !loadedUserId) return <p className="p-6">Cargando…</p>

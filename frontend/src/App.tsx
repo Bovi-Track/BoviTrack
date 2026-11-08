@@ -19,7 +19,7 @@ import { AppShell } from './components/dashboard/AppShell.tsx'
 import type { ReactNode } from 'react'
 
 // RF-UC14-01 (parcial): exige sesión para entrar a las rutas privadas.
-function RequireAuth({ children }: { children: ReactNode }) {
+export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
 
   if (loading) {
