@@ -1,3 +1,4 @@
+import './auth/preserveRecoveryUrl.ts'
 import './index.css'
 import App from './App.tsx'
 import { StrictMode } from 'react'
