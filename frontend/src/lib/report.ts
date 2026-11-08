@@ -579,7 +579,7 @@ export function buildReportPdf(data: ReportData, selection: ReportSelection) {
         ? [['No hay ventas registradas en el periodo.', '', '', '', '', '', '', '']]
         : [...sales].sort((a, b) => b.fecha_venta.localeCompare(a.fecha_venta) || b.id.localeCompare(a.id)).map((sale) => {
             const bovine = byBovine.get(sale.bovino_id)
-            const currency = (value: number | null) => value == null ? 'No disponible' : `₡${value.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            const currency = (value: number | null) => value == null ? 'No disponible' : `CRC ${value.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             const gross = Math.round((sale.peso_salida_kg * sale.precio_kilo + Number.EPSILON) * 100) / 100
             return [
               bovine ? bovineLabel(bovine) : sale.identificador_interno,

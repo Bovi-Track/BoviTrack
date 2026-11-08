@@ -70,6 +70,9 @@ export async function createSanitaryRecord(
     Number(dosis) <= 0 || !isValidIsoDate(fecha) || (proxima && !isValidIsoDate(proxima))) {
     throw new Error('Completa producto, dosis positiva y fechas válidas.')
   }
+  if (proxima && proxima <= fecha) {
+    throw new Error('La próxima aplicación debe ser posterior a la fecha aplicada.')
+  }
   return capture(farmId, 'sanitary', {
     bovino_id: bovinoId, tipo, producto, dosis, fecha, proxima, observaciones,
   }, (id): SanitaryRecord => ({

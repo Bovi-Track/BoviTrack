@@ -55,9 +55,10 @@ export function computeMetrics(
   }
 }
 
-// RF-UC10-01: normaliza pesajes positivos por fecha distinta dentro de los 56 días, hoy incluido.
+// RF-UC10-01: una fecha distinta por día, en el intervalo cerrado
+// [consulta − 56 días, consulta]. El día límite inferior sí cuenta.
 function recentSaleWeighings(weighings: Weighing[], referenceDate: string) {
-  const firstDate = addDays(referenceDate, 1 - SALE_WEIGHING_WINDOW_DAYS)
+  const firstDate = addDays(referenceDate, -SALE_WEIGHING_WINDOW_DAYS)
   const byDate = new Map<string, Weighing>()
   const sorted = [...weighings]
     .filter((weigh) => Number.isFinite(weigh.peso_kg) && weigh.peso_kg > 0)
