@@ -505,13 +505,29 @@ La bitácora documenta una validación **por requisito**, combinando:
 
 Otras cifras reportadas: UC-14 administrador, 39 controles HTTP/Chromium; UC-03, 32 comprobaciones PostgreSQL y 55 HTTP/Chromium; UC-13, 30 comprobaciones PostgreSQL y 55 HTTP/Chromium.
 
-> **Nota:** el directorio `frontend/tests/` **no está presente** en el repositorio todavía no se pueden documentar.
+### 15.3 Plan de pruebas y suite automatizada
 
-### 15.3 Pendientes de validación
+El **Plan de Pruebas** define una matriz de **110 casos** por caso de uso (autenticación, roles, usuarios, compra, trazabilidad, fincas, toros, pesajes, GMD, sanidad, insumos, inventario, evaluación de venta, tareas, venta, baja, PDF, offline, integridad y atributos de calidad). El plan es solo de diseño; los resultados están en el **Informe de Pruebas** del 8 de noviembre de 2026.
 
-- **Cuenta inactiva real**: confirmada manualmente por el usuario para varios flujos; persiste como pendiente en algunas referencias del documento de contexto (inconsistencia documental, ver sección 18).
-- **Recuperación de contraseña** completa (correo, enlace y cambio) en Supabase.
-- **Revisión manual de la cola antigua** de pesajes sin propietario.
+La suite se ejecuta desde la raíz del repositorio con:
+
+```bash
+npm test
+```
+
+| Dato | Valor |
+|---|---|
+| Resultado | 13 archivos de frontend, **81 pruebas en verde**; después, **2 pruebas de API en verde** |
+| Herramientas | Vitest 5.1.0, happy-dom, Python 3.12.6, FastAPI 0.115.11 |
+| Sistema | Windows 10; revisión del repositorio `b7188db`; zona horaria UTC−6 |
+
+| Grupo | Archivos (según el plan) | Qué comprueba |
+|---|---|---|
+| Compra, GMD, evaluación y venta | `cp-compra`, `cp-gmd`, `cp-evaluacion-venta`, `cp-venta` | Flete proporcional y céntimos, GMD, ventana de 56 días, decisión de venta y rentabilidad |
+| Pesaje e inventario | `cp-pesajes-inventario`, `cp-captura-local` | Peso no positivo, saldo, duplicidad de insumo, captura local |
+| Roles, sesión y navegación | `cp-roles-auth`, `cp-acceso-interfaz` | Contraseña, mensajes de acceso, rutas privadas y bloqueo de rutas administrativas al personal |
+| Offline y sincronización | `cp-cola-local`, `cp-sincronizacion`, `cp-offline-sanidad`, `cp-operaciones-en-linea` | Cola aislada por usuario, envío único, rechazo conservado, operaciones que exigen internet |
+| Reportes | `cp-reportes-dominio` | PDF con periodo, secciones vacías, moneda `CRC` |
 
 ---
 
